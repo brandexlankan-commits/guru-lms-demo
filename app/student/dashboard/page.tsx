@@ -1,327 +1,700 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabase';
+import { useRouter } from 'next/navigation';
 import { 
-  Video, Calendar, Clock, PlayCircle, Shield, ArrowLeft, 
-  BookOpen, ShoppingBag, Bell, UploadCloud, CheckCircle2, FileText, 
-  CreditCard, Smartphone, Download, UserCheck
+  Video, PlayCircle, FileText, Bell, LogOut, 
+  ShieldAlert, Clock, Loader2, Play, 
+  ExternalLink, Download, AlertCircle, BookOpen, ChevronDown,
+  CreditCard, UploadCloud, X, CheckCircle
 } from 'lucide-react';
-import Link from 'next/link';
 
 export default function StudentDashboard() {
-  const [activeTab, setActiveTab] = useState<'classes' | 'assignments' | 'store' | 'notices'>('classes');
-  const studentEmail = "nuwan.student2026@gmail.com";
-  const [watermarkPos, setWatermarkPos] = useState({ top: '25%', left: '35%' });
-  const [slipUploaded, setSlipUploaded] = useState(false);
-  const [assignmentSubmitted, setAssignmentSubmitted] = useState(false);
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [student, setStudent] = useState<any>(null);
+  const [deviceBlocked, setDeviceBlocked] = useState(false);
+  
+  // Courses States
+  const [enrolledCourses, setEnrolledCourses] = useState<any[]>([]);
+  const [allCourses, setAllCourses] = useState<any[]>([]);
+  const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
 
-  // Floating Watermark Animation
+  // Tabs State
+  const [activeTab, setActiveTab] = useState<'classes' | 'assignments' | 'notices'>('classes');
+
+  // Course-specific Content States
+  const [liveClass, setLiveClass] = useState<any>(null);
+  const [recordings, setRecordings] = useState<any[]>([]);
+  const [selectedVideo, setSelectedVideo] = useState<any>(null);
+  const [assignments, setAssignments] = useState<any[]>([]);
+  const [notices, setNotices] = useState<any[]>([]);
+
+  // Slip Modal States
+  const [showSlipModal, setShowSlipModal] = useState(false);
+  const [selectedCourseForSlip, setSelectedCourseForSlip] = useState<string>('');
+  const [slipFile, setSlipFile] = useState<File | null>(null);
+  const [uploadingSlip, setUploadingSlip] = useState(false);
+
+  // Dynamic Floating Watermark
+  const [watermarkPos, setWatermarkPos] = useState({ top: '20%', left: '30%' });
+
   useEffect(() => {
     const interval = setInterval(() => {
-      const randomTop = Math.floor(Math.random() * 65) + 15;
-      const randomLeft = Math.floor(Math.random() * 55) + 10;
+      const randomTop = Math.floor(Math.random() * 70) + 15;
+      const randomLeft = Math.floor(Math.random() * 60) + 10;
       setWatermarkPos({ top: `${randomTop}%`, left: `${randomLeft}%` });
-    }, 3500);
+    }, 4000);
     return () => clearInterval(interval);
   }, []);
 
+  const loadCourseContent = async (courseId: number) => {
+    // 1. Live Class
+    const { data: classData } = await supabase
+      .from('live_classes')
+      .select('*')
+      .eq('course_id', courseId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    setLiveClass(classData || null);
+
+    // 2. Recordings
+    const { data: recData } = await supabase
+      .from('recordings')
+      .select('*')
+      .eq('course_id', courseId)
+      .order('lesson_date', { ascending: false });
+
+    if (recData && recData.length > 0) {
+      setRecordings(recData);
+      setSelectedVideo(recData[0]);
+    } else {
+      setRecordings([]);
+      setSelectedVideo(null);
+    }
+
+    // 3. Assignments
+    const { data: assignData } = await supabase
+      .from('assignments')
+      .select('*')
+      .eq('course_id', courseId)
+      .order('created_at', { ascending: false });
+    setAssignments(assignData || []);
+
+    // 4. Notices
+    const { data: noticeData } = await supabase
+      .from('notices')
+      .select('*')
+      .eq('course_id', courseId)
+      .order('created_at', { ascending: false });
+    setNotices(noticeData || []);
+  };
+
+  const fetchEnrolledCourses = async (studentId: string) => {
+    const { data: enrollData } = await supabase
+      .from('course_enrollments')
+      .select('course_id, courses(*)')
+      .eq('student_id', studentId)
+      .eq('status', 'active');
+
+    if (enrollData && enrollData.length > 0) {
+      const myCourses: any[] = enrollData
+        .map((e: any) => (Array.isArray(e.courses) ? e.courses[0] : e.courses))
+        .filter(Boolean);
+
+      if (myCourses.length > 0 && myCourses[0]) {
+        const firstCourse: any = myCourses[0];
+        setEnrolledCourses(myCourses);
+        setSelectedCourseId(Number(firstCourse.id));
+        await loadCourseContent(Number(firstCourse.id));
+      } else {
+        setEnrolledCourses([]);
+        setSelectedCourseId(null);
+      }
+    } else {
+      setEnrolledCourses([]);
+      setSelectedCourseId(null);
+    }
+  };
+
+  useEffect(() => {
+    let deviceChannel: any;
+    let classChannel: any;
+
+    const initDashboard = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push('/login');
+        return;
+      }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', session.user.id)
+        .single();
+
+      if (!profile) {
+        router.push('/login');
+        return;
+      }
+      setStudent(profile);
+
+      // Device Check
+      const localDeviceId = localStorage.getItem('guru_device_id');
+      if (profile.current_device_id && profile.current_device_id !== localDeviceId) {
+        setDeviceBlocked(true);
+        await supabase.auth.signOut();
+        return;
+      }
+
+      // Fetch Enrolled Courses
+      await fetchEnrolledCourses(profile.id);
+
+      // Fetch All Available Courses (for Slip Payment Modal)
+      const { data: allCoursesData } = await supabase
+        .from('courses')
+        .select('*')
+        .order('category', { ascending: true });
+      if (allCoursesData && allCoursesData.length > 0) {
+        setAllCourses(allCoursesData);
+        setSelectedCourseForSlip(allCoursesData[0].id.toString());
+      }
+
+      setLoading(false);
+
+      // Realtime Device Check
+      deviceChannel = supabase
+        .channel(`public:profiles:${profile.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'profiles',
+            filter: `id=eq.${profile.id}`,
+          },
+          (payload: any) => {
+            const updatedDeviceId = payload.new.current_device_id;
+            const myDeviceId = localStorage.getItem('guru_device_id');
+            if (updatedDeviceId && updatedDeviceId !== myDeviceId) {
+              setDeviceBlocked(true);
+              supabase.auth.signOut();
+            }
+          }
+        )
+        .subscribe();
+
+      // Realtime Live Class
+      classChannel = supabase
+        .channel('public:live_classes')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'live_classes' },
+          () => {
+            if (selectedCourseId) loadCourseContent(selectedCourseId);
+          }
+        )
+        .subscribe();
+    };
+
+    initDashboard();
+
+    return () => {
+      if (deviceChannel) supabase.removeChannel(deviceChannel);
+      if (classChannel) supabase.removeChannel(classChannel);
+    };
+  }, [router]);
+
+  const handleCourseChange = (courseId: number) => {
+    setSelectedCourseId(courseId);
+    loadCourseContent(courseId);
+  };
+
+  // Submit Bank Slip Function
+  const handleSubmitSlip = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!slipFile) {
+      alert('කරුණාකර බැංකු රිසිට්පත තෝරන්න (Select Slip Image / PDF).');
+      return;
+    }
+
+    const courseObj = allCourses.find((c: any) => c.id.toString() === selectedCourseForSlip);
+    if (!courseObj) return;
+
+    setUploadingSlip(true);
+    try {
+      // 1. Upload to Supabase Storage
+      const fileExt = slipFile.name.split('.').pop();
+      const fileName = `${student.id}_${Date.now()}.${fileExt}`;
+      const filePath = `${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('slips')
+        .upload(filePath, slipFile);
+
+      if (uploadError) throw uploadError;
+
+      // 2. Get Public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('slips')
+        .getPublicUrl(filePath);
+
+      // 3. Insert into bank_slips
+      const { error: dbError } = await supabase.from('bank_slips').insert([
+        {
+          student_id: student.id,
+          course_id: courseObj.id,
+          course_name: courseObj.title,
+          amount: courseObj.monthly_fee,
+          slip_url: publicUrl,
+          status: 'pending'
+        }
+      ]);
+
+      if (dbError) throw dbError;
+
+      // 4. Record Pending Enrollment
+      await supabase.from('course_enrollments').upsert(
+        {
+          student_id: student.id,
+          course_id: courseObj.id,
+          status: 'pending'
+        },
+        { onConflict: 'student_id,course_id' }
+      );
+
+      alert('බැංකු රිසිට්පත සාර්ථකව යොමු කරන ලදී! ගුරුවරයා විසින් එය අනුමත කළ පසු ඔබට මෙම පන්තියට ක්ෂණිකව ප්‍රවේශ විය හැක.');
+      setShowSlipModal(false);
+      setSlipFile(null);
+    } catch (err: any) {
+      alert('දෝෂයක් සිදුවිය: ' + err.message);
+    } finally {
+      setUploadingSlip(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    localStorage.removeItem('guru_device_id');
+    await supabase.auth.signOut();
+    router.push('/login');
+  };
+
+  if (deviceBlocked) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-slate-900 border border-red-500/30 rounded-3xl p-8 text-center space-y-4 shadow-2xl">
+          <div className="w-16 h-16 bg-red-500/10 text-red-500 rounded-full flex items-center justify-center mx-auto border border-red-500/20">
+            <ShieldAlert className="w-8 h-8" />
+          </div>
+          <h2 className="text-xl font-bold text-white">උපාංග ආරක්ෂණ අනතුරු ඇඟවීමයි!</h2>
+          <p className="text-xs text-slate-400 leading-relaxed">
+            ඔබගේ ගිණුම වෙනත් දුරකථනයකින් හෝ පරිගණකයකින් Login කර ඇත. එක් ගිණුමක් එකවර භාවිතා කළ හැක්කේ එක් උපාංගයකින් පමණි.
+          </p>
+          <button
+            onClick={() => router.push('/login')}
+            className="w-full py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold transition cursor-pointer"
+          >
+            නැවත Login වන්න
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+      </div>
+    );
+  }
+
+  const currentCourse = enrolledCourses.find((c: any) => c.id === selectedCourseId);
+  const targetSlipCourse = allCourses.find((c: any) => c.id.toString() === selectedCourseForSlip);
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 pb-16">
-      {/* Top Navbar */}
-      <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-50 px-6 py-4 flex justify-between items-center">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center font-bold text-white shadow-lg shadow-blue-500/20">
-            AL
+      {/* Header */}
+      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
+          
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center font-bold text-white shadow-lg shadow-blue-500/20">
+              AL
+            </div>
+            <div>
+              <div className="text-sm font-bold text-white tracking-wide">A/L Master LMS</div>
+              <div className="text-[10px] text-slate-400">{student?.full_name}</div>
+            </div>
           </div>
-          <div>
-            <h2 className="font-bold text-base leading-none">A/L Master LMS</h2>
-            <span className="text-xs text-slate-400">2026 Chemistry Batch</span>
-          </div>
-        </div>
 
-        {/* Navigation Tabs */}
-        <nav className="hidden md:flex items-center gap-1 bg-slate-950 p-1.5 rounded-xl border border-slate-800">
-          <button 
-            onClick={() => setActiveTab('classes')}
-            className={`px-4 py-2 rounded-lg text-xs font-semibold transition flex items-center gap-2 ${activeTab === 'classes' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}
-          >
-            <Video className="w-4 h-4"/> Live & Recordings
-          </button>
-          <button 
-            onClick={() => setActiveTab('assignments')}
-            className={`px-4 py-2 rounded-lg text-xs font-semibold transition flex items-center gap-2 ${activeTab === 'assignments' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}
-          >
-            <FileText className="w-4 h-4"/> Assignments & Tutes
-          </button>
-          <button 
-            onClick={() => setActiveTab('store')}
-            className={`px-4 py-2 rounded-lg text-xs font-semibold transition flex items-center gap-2 ${activeTab === 'store' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}
-          >
-            <ShoppingBag className="w-4 h-4"/> Course & Book Store
-          </button>
-          <button 
-            onClick={() => setActiveTab('notices')}
-            className={`px-4 py-2 rounded-lg text-xs font-semibold transition flex items-center gap-2 ${activeTab === 'notices' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}
-          >
-            <Bell className="w-4 h-4"/> Notices
-          </button>
-        </nav>
+          {/* Enrolled Courses Switcher */}
+          {enrolledCourses.length > 0 && (
+            <div className="relative">
+              <select
+                value={selectedCourseId || ''}
+                onChange={(e) => handleCourseChange(Number(e.target.value))}
+                className="bg-slate-950 border border-blue-500/40 text-blue-300 rounded-xl px-3.5 py-1.5 text-xs font-semibold focus:outline-none cursor-pointer pr-8 appearance-none shadow-md shadow-blue-500/10"
+              >
+                {enrolledCourses.map((c: any) => (
+                  <option key={c.id} value={c.id} className="bg-slate-900 text-white">
+                    [{c.category}] {c.title}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 text-blue-400 absolute right-2.5 top-2.5 pointer-events-none" />
+            </div>
+          )}
 
-        <div className="flex items-center gap-3">
-          <div className="text-right hidden sm:block">
-            <p className="text-sm font-semibold">Nuwan Sameera</p>
-            <p className="text-xs text-emerald-400 font-mono">● Single-Device Active</p>
+          {/* Navigation Tabs */}
+          <div className="hidden md:flex items-center bg-slate-950/80 p-1 rounded-xl border border-slate-800">
+            <button
+              onClick={() => setActiveTab('classes')}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                activeTab === 'classes' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Video className="w-3.5 h-3.5" />
+              <span>Live & Recordings</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('assignments')}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                activeTab === 'assignments' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>Assignments & Tutes</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('notices')}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                activeTab === 'notices' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Bell className="w-3.5 h-3.5" />
+              <span>Notices</span>
+            </button>
           </div>
-          <Link href="/" className="text-xs bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg border border-slate-700 flex items-center gap-1">
-            <ArrowLeft className="w-3.5 h-3.5"/> Portal
-          </Link>
+
+          {/* Fee Payment Button & Logout */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowSlipModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-semibold shadow-md shadow-blue-500/20 transition cursor-pointer"
+            >
+              <CreditCard className="w-3.5 h-3.5" />
+              <span>ගාස්තු ගෙවීම / Slip</span>
+            </button>
+
+            <button
+              onClick={handleLogout}
+              className="p-2 rounded-xl bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition border border-slate-700/50 cursor-pointer"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </header>
 
-      {/* Mobile Tab Bar */}
-      <div className="flex md:hidden overflow-x-auto gap-2 p-4 bg-slate-900 border-b border-slate-800">
-        <button onClick={() => setActiveTab('classes')} className={`px-3 py-1.5 rounded-lg text-xs whitespace-nowrap ${activeTab === 'classes' ? 'bg-blue-600' : 'bg-slate-800'}`}>Live & Videos</button>
-        <button onClick={() => setActiveTab('assignments')} className={`px-3 py-1.5 rounded-lg text-xs whitespace-nowrap ${activeTab === 'assignments' ? 'bg-blue-600' : 'bg-slate-800'}`}>Assignments</button>
-        <button onClick={() => setActiveTab('store')} className={`px-3 py-1.5 rounded-lg text-xs whitespace-nowrap ${activeTab === 'store' ? 'bg-blue-600' : 'bg-slate-800'}`}>Store</button>
-        <button onClick={() => setActiveTab('notices')} className={`px-3 py-1.5 rounded-lg text-xs whitespace-nowrap ${activeTab === 'notices' ? 'bg-blue-600' : 'bg-slate-800'}`}>Notices</button>
-      </div>
+      {/* Main Container */}
+      <main className="max-w-7xl mx-auto px-4 pt-6 space-y-6">
 
-      <main className="max-w-7xl mx-auto p-6 space-y-8">
-        
-        {/* TAB 1: LIVE CLASSES & WATERMARKED RECORDINGS */}
-        {activeTab === 'classes' && (
-          <div className="space-y-8">
-            {/* Live Class Card */}
-            <div className="rounded-2xl bg-gradient-to-r from-blue-950 via-indigo-950 to-slate-900 border border-blue-500/40 p-6 sm:p-8">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+        {/* If Not Enrolled in Any Course */}
+        {enrolledCourses.length === 0 && (
+          <div className="p-8 rounded-3xl bg-slate-900 border border-slate-800 text-center space-y-4 shadow-xl">
+            <div className="w-14 h-14 rounded-2xl bg-blue-500/10 text-blue-400 flex items-center justify-center mx-auto border border-blue-500/20">
+              <BookOpen className="w-7 h-7" />
+            </div>
+            <h2 className="text-lg font-bold text-white">ඔබ තවමත් කිසිදු පන්තියකට ලියාපදිංචි වී නොමැත</h2>
+            <p className="text-xs text-slate-400 max-w-md mx-auto leading-relaxed">
+              ඔබට අවශ්‍ය පන්තිය තෝරා, පන්ති ගාස්තු ගෙවූ රිසිට්පත යොමු කිරීමෙන් ක්ෂණිකව පන්ති සමඟ සම්බන්ධ විය හැක.
+            </p>
+            <button
+              onClick={() => setShowSlipModal(true)}
+              className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-lg shadow-blue-600/30 cursor-pointer"
+            >
+              පන්තියක් තෝරා Slip එක Upload කරන්න
+            </button>
+          </div>
+        )}
+
+        {/* Current Course Info Banner */}
+        {currentCourse && (
+          <div className="flex items-center justify-between bg-slate-900/40 border border-slate-800/80 rounded-2xl px-5 py-3 text-xs">
+            <div className="flex items-center gap-2 text-slate-300">
+              <BookOpen className="w-4 h-4 text-blue-400" />
+              <span>වත්මන් පන්තිය: <strong className="text-white">{currentCourse.title}</strong></span>
+              <span className="px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 text-[10px] uppercase font-bold">
+                {currentCourse.category} • {currentCourse.type}
+              </span>
+            </div>
+            <span className="text-[11px] text-slate-400">ගාස්තුව: Rs. {currentCourse.monthly_fee}/-</span>
+          </div>
+        )}
+
+        {/* TAB 1: LIVE & RECORDINGS */}
+        {currentCourse && activeTab === 'classes' && (
+          <div className="space-y-6">
+            {liveClass ? (
+              <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-blue-900/40 via-indigo-950/40 to-slate-900 border border-blue-500/30 p-6 md:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shadow-2xl">
                 <div className="space-y-2">
-                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold animate-pulse">
-                    ● LIVE ZOOM CLASS READY
-                  </div>
-                  <h1 className="text-2xl sm:text-3xl font-extrabold text-white">
-                    කාබනික රසායනය - විශේෂ ප්‍රශ්න පත්‍ර සාකච්ඡාව
-                  </h1>
-                  <p className="text-slate-300 text-sm flex items-center gap-4">
-                    <span className="flex items-center gap-1.5"><Clock className="w-4 h-4 text-blue-400"/> අද රාත්‍රී 8:00 - 11:00</span>
-                    <span className="flex items-center gap-1.5"><Calendar className="w-4 h-4 text-blue-400"/> අගෝස්තු 25, 2026</span>
-                  </p>
-                </div>
-
-                <button 
-                  onClick={() => alert("Zoom Live Class එකට LMS එක හරහා ආරක්ෂිතව Login විය! (Attendance Auto Record විය)")}
-                  className="px-8 py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl shadow-lg shadow-blue-600/30 transition flex items-center gap-2 text-base cursor-pointer"
-                >
-                  <Video className="w-5 h-5" /> Join Live Zoom Class
-                </button>
-              </div>
-            </div>
-
-            {/* Video Player Preview with Floating Watermark */}
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <div>
-                  <h2 className="text-xl font-bold flex items-center gap-2 text-white">
-                    <PlayCircle className="text-blue-400" /> ආරක්ෂිත Class Recordings (Dynamic Watermark Protection)
-                  </h2>
-                  <p className="text-xs text-slate-400">වීඩියෝව මත ශිෂ්‍යයාගේ Email එක Float වන අයුරු (Screen-record proof protection)</p>
-                </div>
-                <span className="text-xs bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-3 py-1 rounded-full flex items-center gap-1">
-                  <Shield className="w-3.5 h-3.5" /> DRM Secured
-                </span>
-              </div>
-
-              <div className="grid lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 relative aspect-video bg-black rounded-2xl overflow-hidden border border-slate-800 shadow-2xl flex items-center justify-center">
-                  <div className="text-center p-6">
-                    <div className="w-16 h-16 bg-blue-600/20 text-blue-400 rounded-full flex items-center justify-center mx-auto mb-3">
-                      <PlayCircle className="w-10 h-10" />
-                    </div>
-                    <h3 className="text-lg font-bold text-white">පාඩම 01: Organic Reaction Mechanisms Full Breakdown</h3>
-                    <p className="text-xs text-slate-500 mt-1">Duration: 2h 45m • 1080p Stream</p>
-                  </div>
-
-                  {/* FLOATING ANTI-LEAK WATERMARK */}
-                  <div 
-                    style={{ top: watermarkPos.top, left: watermarkPos.left }}
-                    className="absolute pointer-events-none transition-all duration-1000 ease-in-out opacity-35 select-none text-white text-xs sm:text-sm font-mono bg-slate-900/90 px-3 py-1 rounded border border-white/20 shadow-lg"
-                  >
-                    {studentEmail} • IP: 112.134.195.42
-                  </div>
-                </div>
-
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3">
-                  <h3 className="font-semibold text-sm text-slate-300 pb-2 border-b border-slate-800">
-                    පසුගිය Recordings ලැයිස්තුව
-                  </h3>
-                  {[
-                    { title: 'Organic Reaction Mechanisms', date: 'Aug 18, 2026', time: '2h 30m', active: true },
-                    { title: 'Inorganic Flame Tests Revision', date: 'Aug 11, 2026', time: '3h 10m', active: false },
-                    { title: 'Amines Preparation Breakdown', date: 'Aug 04, 2026', time: '2h 45m', active: false },
-                  ].map((rec, i) => (
-                    <div key={i} className={`p-3 rounded-xl border transition flex items-center justify-between ${rec.active ? 'bg-blue-600/10 border-blue-500/40 text-white' : 'bg-slate-950/40 border-slate-800/80 text-slate-400'}`}>
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium leading-tight">{rec.title}</p>
-                        <p className="text-xs text-slate-500">{rec.date} • {rec.time}</p>
-                      </div>
-                      <PlayCircle className={`w-5 h-5 ${rec.active ? 'text-blue-400' : 'text-slate-600'}`} />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 2: ASSIGNMENTS & HOMEWORK SUBMISSION */}
-        {activeTab === 'assignments' && (
-          <div className="space-y-6">
-            <div>
-              <h2 className="text-xl font-bold text-white">පැවරුම් සහ නිබන්ධන (Assignments & Tutes)</h2>
-              <p className="text-xs text-slate-400">උත්තර පත්‍ර Upload කිරීම සහ ලකුණු බලාගැනීම.</p>
-            </div>
-
-            <div className="grid md:grid-cols-2 gap-6">
-              {/* Active Assignment Card */}
-              <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <span className="text-xs font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/20">
-                      භාරදිය යුතු දිනය: Aug 28, 2026 (11:59 PM)
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-500/20 border border-red-500/30 text-red-400 text-[11px] font-bold">
+                    <span className="w-2 h-2 rounded-full bg-red-500 animate-ping"></span>
+                    LIVE ZOOM CLASS READY
+                  </span>
+                  <h1 className="text-xl md:text-2xl font-bold text-white">{liveClass.title}</h1>
+                  <div className="flex flex-wrap items-center gap-4 text-xs text-slate-400 pt-1">
+                    <span className="flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-blue-400" /> {liveClass.date} • {liveClass.time}
                     </span>
-                    <h3 className="text-lg font-bold text-white mt-2">Organic Chemistry Tute 04 - Reaction Sheet</h3>
                   </div>
                 </div>
 
-                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-sm text-slate-300">
-                    <FileText className="w-4 h-4 text-blue-400"/> Tute_04_Questions.pdf
-                  </div>
-                  <button onClick={() => alert("ප්‍රශ්න පත්‍රය Download වේ!")} className="text-xs text-blue-400 hover:underline flex items-center gap-1">
-                    <Download className="w-3.5 h-3.5"/> Download
-                  </button>
+                <a
+                  href={liveClass.zoom_join_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-6 py-3.5 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm transition shadow-lg shadow-blue-600/30 flex items-center gap-2 cursor-pointer shrink-0"
+                >
+                  <Video className="w-4 h-4" />
+                  <span>Join Live Zoom Class</span>
+                  <ExternalLink className="w-3.5 h-3.5 opacity-70" />
+                </a>
+              </div>
+            ) : (
+              <div className="p-8 rounded-3xl bg-slate-900/50 border border-slate-800 text-center space-y-2">
+                <Clock className="w-8 h-8 text-slate-500 mx-auto" />
+                <h3 className="text-sm font-semibold text-slate-300">මෙම පන්තියට දැනට සජීවී කාලසටහනක් නොමැත</h3>
+                <p className="text-xs text-slate-500">ගුරුතුමා විසින් අලුත් Zoom පන්තියක් Schedule කළ සැනින් මෙහි දිස්වනු ඇත.</p>
+              </div>
+            )}
+
+            {/* Video Player & Recordings List */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                    <PlayCircle className="w-4 h-4 text-blue-400" />
+                    ආරක්ෂිත Class Recordings (Dynamic Watermark Protection)
+                  </h2>
+                  <span className="px-2.5 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold">
+                    DRM Secured
+                  </span>
                 </div>
 
-                {/* Upload Answer Box */}
-                {!assignmentSubmitted ? (
-                  <div className="border-2 border-dashed border-slate-700 rounded-xl p-6 text-center space-y-3 bg-slate-950/40">
-                    <UploadCloud className="w-8 h-8 text-blue-400 mx-auto" />
-                    <p className="text-xs text-slate-300">ලියූ උත්තර කොළවල Photos හෝ PDF එක මෙතනට Upload කරන්න</p>
-                    <button 
-                      onClick={() => setAssignmentSubmitted(true)}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white rounded-lg transition"
-                    >
-                      Upload Answer Script (Demo Submit)
-                    </button>
+                <div className="relative aspect-video rounded-3xl bg-slate-900 border border-slate-800 overflow-hidden flex items-center justify-center shadow-2xl">
+                  <div 
+                    className="absolute pointer-events-none transition-all duration-1000 ease-in-out font-mono font-bold text-[12px] text-white/20 select-none z-30"
+                    style={{ top: watermarkPos.top, left: watermarkPos.left }}
+                  >
+                    {student?.email} • IP Protected
                   </div>
-                ) : (
-                  <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4" /> උත්තර පත්‍රය සාර්ථකව භාරදුනි! (Marking Pending)
+
+                  <div className="text-center space-y-3 z-10">
+                    <div className="w-16 h-16 rounded-full bg-blue-600/20 border border-blue-500/40 text-blue-400 flex items-center justify-center mx-auto shadow-inner">
+                      <Play className="w-7 h-7 fill-blue-400 ml-1" />
+                    </div>
+                    <div className="text-sm font-semibold text-slate-200">
+                      {selectedVideo ? selectedVideo.title : 'මෙම පන්තියට අදාළ Recordings තවම එක් කර නැත'}
+                    </div>
+                    {selectedVideo && (
+                      <div className="text-[11px] text-slate-500 font-mono">
+                        Duration: {selectedVideo.duration || '2h 30m'} • 1080p Stream
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
 
-              {/* Past Graded Assignment Card */}
-              <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
-                <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
-                  Marked & Reviewed
-                </span>
-                <h3 className="text-lg font-bold text-white">Inorganic Flame Tests - Assignment 01</h3>
-                
-                <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-slate-400">ලබාගත් ලකුණු</p>
-                    <p className="text-2xl font-black text-emerald-400">88 / 100</p>
-                  </div>
-                  <button onClick={() => alert("Model Answer Sheet එක Download වේ!")} className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs text-white rounded-lg border border-slate-700 flex items-center gap-1">
-                    <Download className="w-3.5 h-3.5"/> Model Answers
-                  </button>
+              {/* Playlist */}
+              <div className="space-y-3">
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  {currentCourse?.title} Recordings ({recordings.length})
+                </h3>
+                <div className="space-y-2.5 max-h-[420px] overflow-y-auto pr-1">
+                  {recordings.length === 0 ? (
+                    <div className="text-xs text-slate-600 py-8 text-center">Recordings නොමැත</div>
+                  ) : (
+                    recordings.map((rec: any) => (
+                      <div
+                        key={rec.id}
+                        onClick={() => setSelectedVideo(rec)}
+                        className={`p-3.5 rounded-2xl border transition cursor-pointer flex items-center justify-between ${
+                          selectedVideo?.id === rec.id
+                            ? 'bg-blue-600/10 border-blue-500/40 text-white'
+                            : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                        }`}
+                      >
+                        <div className="space-y-1 pr-2">
+                          <div className="text-xs font-semibold line-clamp-1">{rec.title}</div>
+                          <div className="text-[10px] text-slate-500">{rec.lesson_date} • {rec.duration || '2h 30m'}</div>
+                        </div>
+                        <PlayCircle className={`w-4 h-4 shrink-0 ${selectedVideo?.id === rec.id ? 'text-blue-400' : 'text-slate-600'}`} />
+                      </div>
+                    ))
+                  )}
                 </div>
-                <p className="text-xs text-slate-400 italic bg-slate-950/60 p-3 rounded-lg border border-slate-800/80">
-                  <span className="font-bold text-slate-300">ගුරුතුමාගේ සටහන:</span> "ප්‍රශ්න අංක 4 හි වර්ණ විපර්යාසය නැවත ලියා පුහුණු වන්න. අනෙක් සියල්ල ඉතා විශිෂ්ටයි!"
-                </p>
               </div>
             </div>
           </div>
         )}
 
-        {/* TAB 3: COURSE & BOOK STORE */}
-        {activeTab === 'store' && (
+        {/* TAB 2: ASSIGNMENTS */}
+        {currentCourse && activeTab === 'assignments' && (
           <div className="space-y-6">
-            <div>
-              <h2 className="text-xl font-bold text-white">පාඨමාලා සහ නිබන්ධන පොත් (Store)</h2>
-              <p className="text-xs text-slate-400">Online Payments හෝ Bank Slip Upload මඟින් මිලදී ගන්න.</p>
-            </div>
-
-            <div className="grid md:grid-cols-3 gap-6">
-              {/* Product 1 */}
-              <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-3">
-                <div className="aspect-[4/3] bg-slate-950 rounded-xl flex items-center justify-center text-slate-600 border border-slate-800 font-bold text-sm">
-                  📚 Organic Chemistry Complete Guide
-                </div>
-                <h3 className="font-bold text-white text-base">කාබනික රසායනය විශේෂ සිද්ධාන්ත පොත</h3>
-                <p className="text-xs text-slate-400">Physical Book with Home Delivery Islandwide</p>
-                <div className="flex justify-between items-center pt-2">
-                  <span className="text-lg font-extrabold text-blue-400">රු. 2,500</span>
-                  <button 
-                    onClick={() => {
-                      const method = confirm("Online Card Payment එකක් කරන්න OK ඔබන්න. \nBank Slip එකක් Upload කරන්න Cancel ඔබන්න.");
-                      if (method) alert("PayHere Payment Gateway එකට සම්බන්ධ වේ!");
-                      else setSlipUploaded(true);
-                    }}
-                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white rounded-lg transition"
-                  >
-                    Buy Now
-                  </button>
-                </div>
-              </div>
-
-              {/* Product 2 */}
-              <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-3">
-                <div className="aspect-[4/3] bg-slate-950 rounded-xl flex items-center justify-center text-slate-600 border border-slate-800 font-bold text-sm">
-                  ⚡ 2026 Paper Class Full Pack
-                </div>
-                <h3 className="font-bold text-white text-base">2026 Revision Paper Pack (Aug Month)</h3>
-                <p className="text-xs text-slate-400">Full Month Recordings + 4 Model Papers</p>
-                <div className="flex justify-between items-center pt-2">
-                  <span className="text-lg font-extrabold text-blue-400">රු. 3,500</span>
-                  <button 
-                    onClick={() => alert("PayHere Payment Gateway එකට සම්බන්ධ වේ!")}
-                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white rounded-lg transition"
-                  >
-                    Buy Now
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {slipUploaded && (
-              <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center justify-between">
-                <span>📄 ඔබගේ බැංකු රිසිට්පත (Bank Slip) පද්ධතියට ලැබුණි. ගුරුතුමා Approve කළ පසු Access unlock වේ!</span>
-                <span className="font-mono bg-amber-500/20 px-2 py-0.5 rounded">Status: Pending Verification</span>
+            <h2 className="text-lg font-bold text-white flex items-center gap-2">
+              <FileText className="w-5 h-5 text-blue-400" />
+              {currentCourse?.title} - Assignments & Tutes
+            </h2>
+            {assignments.length === 0 ? (
+              <div className="text-center py-12 text-slate-500 text-xs">මෙම පන්තියට තවම Tutes එක් කර නැත.</div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {assignments.map((item: any) => (
+                  <div key={item.id} className="p-6 rounded-3xl bg-slate-900 border border-slate-800 space-y-4 shadow-xl">
+                    <h3 className="text-base font-bold text-white">{item.title}</h3>
+                    <p className="text-xs text-slate-400 leading-relaxed">{item.description}</p>
+                    <a href={item.file_url} className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded-xl transition">
+                      <Download className="w-4 h-4 text-blue-400" />
+                      <span>Download Tute (PDF)</span>
+                    </a>
+                  </div>
+                ))}
               </div>
             )}
           </div>
         )}
 
-        {/* TAB 4: NOTICES & ANNOUNCEMENTS */}
-        {activeTab === 'notices' && (
-          <div className="space-y-4 max-w-3xl">
-            <h2 className="text-xl font-bold text-white">පන්ති නිවේදන පුවරුව (Notice Board)</h2>
-            
-            <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="text-xs font-bold text-blue-400 bg-blue-500/10 px-2.5 py-0.5 rounded-full">New Update</span>
-                <span className="text-xs text-slate-500">අගෝස්තු 24, 2026</span>
+        {/* TAB 3: NOTICES */}
+        {currentCourse && activeTab === 'notices' && (
+          <div className="space-y-6">
+            <h2 className="text-lg font-bold text-white flex items-center gap-2">
+              <Bell className="w-5 h-5 text-blue-400" />
+              {currentCourse?.title} - නිවේදන
+            </h2>
+            {notices.length === 0 ? (
+              <div className="text-center py-12 text-slate-500 text-xs">මෙම පන්තිය සඳහා විශේෂ නිවේදන නොමැත.</div>
+            ) : (
+              <div className="space-y-4 max-w-4xl">
+                {notices.map((notice: any) => (
+                  <div key={notice.id} className="p-6 rounded-3xl bg-slate-900 border border-slate-800 space-y-3 shadow-xl relative overflow-hidden">
+                    <div className="w-1.5 h-full bg-blue-600 absolute left-0 top-0"></div>
+                    <div className="flex items-center justify-between text-xs text-slate-400">
+                      <span className="font-semibold text-blue-400 flex items-center gap-1.5"><AlertCircle className="w-4 h-4" /> පන්ති නිවේදනය</span>
+                      <span>{notice.created_at}</span>
+                    </div>
+                    <h3 className="text-base font-bold text-white">{notice.title}</h3>
+                    <p className="text-xs text-slate-300 leading-relaxed">{notice.content}</p>
+                  </div>
+                ))}
               </div>
-              <h3 className="text-base font-bold text-white">අගෝස්තු 28 විශේෂ ප්‍රශ්න පත්‍ර සාකච්ඡාව පිළිබඳව</h3>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                ලබන සිකුරාදා පැවැත්වෙන විශේෂ Revision පන්තියට පෙර සියලුම සිසුන් Tute 04 නිබන්ධනය සම්පූර්ණ කර Assignment tab එක හරහා Upload කිරීමට කටයුතු කරන්න.
-              </p>
-            </div>
+            )}
           </div>
         )}
 
       </main>
+
+      {/* ================= BANK SLIP UPLOAD MODAL ================= */}
+      {showSlipModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 max-w-lg w-full rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            
+            <button
+              onClick={() => setShowSlipModal(false)}
+              className="absolute right-5 top-5 p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="space-y-1">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <CreditCard className="w-5 h-5 text-blue-400" />
+                පන්ති ගාස්තු ගෙවීම සහ ලියාපදිංචිය
+              </h3>
+              <p className="text-xs text-slate-400">අදාළ පන්තිය තෝරා බැංකු රිසිට්පත (Bank Slip) මෙතැනට Upload කරන්න.</p>
+            </div>
+
+            {/* Bank Details Card */}
+            <div className="p-4 rounded-2xl bg-blue-950/30 border border-blue-500/20 text-xs space-y-1.5 text-slate-300">
+              <div className="font-bold text-blue-400 uppercase tracking-wider text-[10px]">ගුරුතුමාගේ බැංකු ගිණුම් විස්තර</div>
+              <div>බැංකුව: <strong>Commercial Bank</strong></div>
+              <div>ගිණුම් අංකය: <strong className="font-mono text-white text-sm">8001234567</strong></div>
+              <div>නම: <strong>A/L Master Science Academy</strong></div>
+              <div className="text-[11px] text-slate-400">ශාඛාව: කොළඹ ප්‍රධාන ශාඛාව (හෝ Online Transfer)</div>
+            </div>
+
+            <form onSubmit={handleSubmitSlip} className="space-y-4">
+              <div>
+                <label className="text-xs text-slate-400 block mb-1.5">ගාස්තු ගෙවන පන්තිය (Select Course)</label>
+                <select
+                  value={selectedCourseForSlip}
+                  onChange={(e) => setSelectedCourseForSlip(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:border-blue-500 outline-none cursor-pointer"
+                >
+                  {allCourses.map((c: any) => (
+                    <option key={c.id} value={c.id}>
+                      [{c.category} • {c.type.toUpperCase()}] {c.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {targetSlipCourse && (
+                <div className="flex items-center justify-between p-3 rounded-xl bg-slate-950 border border-slate-800/80 text-xs">
+                  <span className="text-slate-400">මාසික පන්ති ගාස්තුව:</span>
+                  <span className="font-mono font-bold text-emerald-400 text-sm">Rs. {targetSlipCourse.monthly_fee}/-</span>
+                </div>
+              )}
+
+              <div>
+                <label className="text-xs text-slate-400 block mb-1.5">බැංකු රිසිට්පත (Bank Slip / Screenshot)</label>
+                <label className="border-2 border-dashed border-slate-800 hover:border-blue-500/50 rounded-2xl p-5 flex flex-col items-center justify-center gap-2 cursor-pointer transition bg-slate-950/40">
+                  <UploadCloud className="w-7 h-7 text-blue-400" />
+                  <span className="text-xs text-slate-300 font-medium">
+                    {slipFile ? slipFile.name : 'රිසිට්පත් ඡායාරූපය මෙතැනින් තෝරන්න'}
+                  </span>
+                  <span className="text-[10px] text-slate-500">JPG, PNG, WebP හෝ PDF (Max 10MB)</span>
+                  <input
+                    type="file"
+                    required
+                    accept="image/*,application/pdf"
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        setSlipFile(e.target.files[0]);
+                      }
+                    }}
+                  />
+                </label>
+              </div>
+
+              <button
+                type="submit"
+                disabled={uploadingSlip}
+                className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition cursor-pointer shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2"
+              >
+                {uploadingSlip ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Upload වෙමින් පවතී...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-4 h-4" />
+                    <span>රිසිට්පත යොමු කරන්න (Submit Slip)</span>
+                  </>
+                )}
+              </button>
+            </form>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
