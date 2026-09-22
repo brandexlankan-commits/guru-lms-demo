@@ -16,10 +16,10 @@ export default function StudentDashboard() {
   const [student, setStudent] = useState<any>(null);
   const [deviceBlocked, setDeviceBlocked] = useState(false);
   
-  // Courses States
+  // Courses States (handles both string UUIDs and Numbers)
   const [enrolledCourses, setEnrolledCourses] = useState<any[]>([]);
   const [allCourses, setAllCourses] = useState<any[]>([]);
-  const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
+  const [selectedCourseId, setSelectedCourseId] = useState<string | number | null>(null);
 
   // Tabs State
   const [activeTab, setActiveTab] = useState<'classes' | 'assignments' | 'notices'>('classes');
@@ -49,7 +49,7 @@ export default function StudentDashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  const loadCourseContent = async (courseId: number) => {
+  const loadCourseContent = async (courseId: string | number) => {
     // 1. Live Class
     const { data: classData } = await supabase
       .from('live_classes')
@@ -92,27 +92,39 @@ export default function StudentDashboard() {
     setNotices(noticeData || []);
   };
 
-  const fetchEnrolledCourses = async (studentId: string) => {
-    const { data: enrollData } = await supabase
+  const fetchEnrolledCourses = async (userId: string) => {
+    // user_id හෝ student_id දෙකෙන් කුමන column එක තිබුණත් enrollments සොයාගැනීම
+    let myCourses: any[] = [];
+
+    const { data: enrollDataUser } = await supabase
       .from('course_enrollments')
       .select('course_id, courses(*)')
-      .eq('student_id', studentId)
+      .eq('user_id', userId)
       .eq('status', 'active');
 
-    if (enrollData && enrollData.length > 0) {
-      const myCourses: any[] = enrollData
+    if (enrollDataUser && enrollDataUser.length > 0) {
+      myCourses = enrollDataUser
         .map((e: any) => (Array.isArray(e.courses) ? e.courses[0] : e.courses))
         .filter(Boolean);
+    } else {
+      const { data: enrollDataStudent } = await supabase
+        .from('course_enrollments')
+        .select('course_id, courses(*)')
+        .eq('student_id', userId)
+        .eq('status', 'active');
 
-      if (myCourses.length > 0 && myCourses[0]) {
-        const firstCourse: any = myCourses[0];
-        setEnrolledCourses(myCourses);
-        setSelectedCourseId(Number(firstCourse.id));
-        await loadCourseContent(Number(firstCourse.id));
-      } else {
-        setEnrolledCourses([]);
-        setSelectedCourseId(null);
+      if (enrollDataStudent && enrollDataStudent.length > 0) {
+        myCourses = enrollDataStudent
+          .map((e: any) => (Array.isArray(e.courses) ? e.courses[0] : e.courses))
+          .filter(Boolean);
       }
+    }
+
+    if (myCourses.length > 0) {
+      setEnrolledCourses(myCourses);
+      const firstCourseId = myCourses[0].id;
+      setSelectedCourseId(firstCourseId);
+      await loadCourseContent(firstCourseId);
     } else {
       setEnrolledCourses([]);
       setSelectedCourseId(null);
@@ -124,40 +136,54 @@ export default function StudentDashboard() {
     let classChannel: any;
 
     const initDashboard = async () => {
+      // 1. Session එක පරීක්ෂා කිරීම
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         router.push('/login');
         return;
       }
 
+      const userId = session.user.id;
+
+      // 2. Profile එක ලබාගැනීම (Failsafe සහිතව)
       const { data: profile } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', session.user.id)
-        .single();
+        .eq('id', userId)
+        .maybeSingle();
 
-      if (!profile) {
-        router.push('/login');
-        return;
+      // Profile Table එකෙන් නොලැබුණත් Auth User Metadata එකෙන් ශිෂ්‍යයාගේ නම සකසයි (Kick-out නොවේ)
+      const currentStudent = profile || {
+        id: userId,
+        full_name: session.user.user_metadata?.full_name || session.user.user_metadata?.username || 'ශිෂ්‍යයා',
+        username: session.user.user_metadata?.username || '',
+        email: session.user.email,
+        current_device_id: localStorage.getItem('guru_device_id'),
+      };
+      setStudent(currentStudent);
+
+      // 3. Single-Device Check
+      let localDeviceId = localStorage.getItem('guru_device_id');
+      if (!localDeviceId) {
+        localDeviceId = 'dev_' + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+        localStorage.setItem('guru_device_id', localDeviceId);
       }
-      setStudent(profile);
 
-      // Device Check
-      const localDeviceId = localStorage.getItem('guru_device_id');
-      if (profile.current_device_id && profile.current_device_id !== localDeviceId) {
+      if (profile?.current_device_id && profile.current_device_id !== localDeviceId) {
         setDeviceBlocked(true);
         await supabase.auth.signOut();
         return;
       }
 
-      // Fetch Enrolled Courses
-      await fetchEnrolledCourses(profile.id);
+      // 4. Enroll වූ පන්ති ලබාගැනීම
+      await fetchEnrolledCourses(userId);
 
-      // Fetch All Available Courses (for Slip Payment Modal)
+      // 5. සියලුම පන්ති ලබාගැනීම (Slip modal එක සඳහා)
       const { data: allCoursesData } = await supabase
         .from('courses')
         .select('*')
         .order('category', { ascending: true });
+
       if (allCoursesData && allCoursesData.length > 0) {
         setAllCourses(allCoursesData);
         setSelectedCourseForSlip(allCoursesData[0].id.toString());
@@ -167,14 +193,14 @@ export default function StudentDashboard() {
 
       // Realtime Device Check
       deviceChannel = supabase
-        .channel(`public:profiles:${profile.id}`)
+        .channel(`public:profiles:${userId}`)
         .on(
           'postgres_changes',
           {
             event: 'UPDATE',
             schema: 'public',
             table: 'profiles',
-            filter: `id=eq.${profile.id}`,
+            filter: `id=eq.${userId}`,
           },
           (payload: any) => {
             const updatedDeviceId = payload.new.current_device_id;
@@ -208,7 +234,7 @@ export default function StudentDashboard() {
     };
   }, [router]);
 
-  const handleCourseChange = (courseId: number) => {
+  const handleCourseChange = (courseId: string | number) => {
     setSelectedCourseId(courseId);
     loadCourseContent(courseId);
   };
@@ -226,7 +252,6 @@ export default function StudentDashboard() {
 
     setUploadingSlip(true);
     try {
-      // 1. Upload to Supabase Storage
       const fileExt = slipFile.name.split('.').pop();
       const fileName = `${student.id}_${Date.now()}.${fileExt}`;
       const filePath = `${fileName}`;
@@ -237,12 +262,10 @@ export default function StudentDashboard() {
 
       if (uploadError) throw uploadError;
 
-      // 2. Get Public URL
       const { data: { publicUrl } } = supabase.storage
         .from('slips')
         .getPublicUrl(filePath);
 
-      // 3. Insert into bank_slips
       const { error: dbError } = await supabase.from('bank_slips').insert([
         {
           student_id: student.id,
@@ -256,14 +279,12 @@ export default function StudentDashboard() {
 
       if (dbError) throw dbError;
 
-      // 4. Record Pending Enrollment
       await supabase.from('course_enrollments').upsert(
         {
-          student_id: student.id,
+          user_id: student.id,
           course_id: courseObj.id,
           status: 'pending'
-        },
-        { onConflict: 'student_id,course_id' }
+        }
       );
 
       alert('බැංකු රිසිට්පත සාර්ථකව යොමු කරන ලදී! ගුරුවරයා විසින් එය අනුමත කළ පසු ඔබට මෙම පන්තියට ක්ෂණිකව ප්‍රවේශ විය හැක.');
@@ -312,7 +333,7 @@ export default function StudentDashboard() {
     );
   }
 
-  const currentCourse = enrolledCourses.find((c: any) => c.id === selectedCourseId);
+  const currentCourse = enrolledCourses.find((c: any) => c.id.toString() === selectedCourseId?.toString());
   const targetSlipCourse = allCourses.find((c: any) => c.id.toString() === selectedCourseForSlip);
 
   return (
@@ -327,7 +348,7 @@ export default function StudentDashboard() {
             </div>
             <div>
               <div className="text-sm font-bold text-white tracking-wide">A/L Master LMS</div>
-              <div className="text-[10px] text-slate-400">{student?.full_name}</div>
+              <div className="text-[10px] text-slate-400">{student?.full_name || student?.username}</div>
             </div>
           </div>
 
@@ -335,13 +356,13 @@ export default function StudentDashboard() {
           {enrolledCourses.length > 0 && (
             <div className="relative">
               <select
-                value={selectedCourseId || ''}
-                onChange={(e) => handleCourseChange(Number(e.target.value))}
+                value={selectedCourseId?.toString() || ''}
+                onChange={(e) => handleCourseChange(e.target.value)}
                 className="bg-slate-950 border border-blue-500/40 text-blue-300 rounded-xl px-3.5 py-1.5 text-xs font-semibold focus:outline-none cursor-pointer pr-8 appearance-none shadow-md shadow-blue-500/10"
               >
                 {enrolledCourses.map((c: any) => (
                   <option key={c.id} value={c.id} className="bg-slate-900 text-white">
-                    [{c.category}] {c.title}
+                    [{c.category || 'Class'}] {c.title}
                   </option>
                 ))}
               </select>
@@ -429,10 +450,10 @@ export default function StudentDashboard() {
               <BookOpen className="w-4 h-4 text-blue-400" />
               <span>වත්මන් පන්තිය: <strong className="text-white">{currentCourse.title}</strong></span>
               <span className="px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 text-[10px] uppercase font-bold">
-                {currentCourse.category} • {currentCourse.type}
+                {currentCourse.category || 'A/L'} • {currentCourse.type || 'Theory'}
               </span>
             </div>
-            <span className="text-[11px] text-slate-400">ගාස්තුව: Rs. {currentCourse.monthly_fee}/-</span>
+            <span className="text-[11px] text-slate-400">ගාස්තුව: Rs. {currentCourse.monthly_fee || '2500'}/-</span>
           </div>
         )}
 
@@ -487,11 +508,12 @@ export default function StudentDashboard() {
                 </div>
 
                 <div className="relative aspect-video rounded-3xl bg-slate-900 border border-slate-800 overflow-hidden flex items-center justify-center shadow-2xl">
+                  {/* Dynamic Floating Watermark showing Student Username */}
                   <div 
                     className="absolute pointer-events-none transition-all duration-1000 ease-in-out font-mono font-bold text-[12px] text-white/20 select-none z-30"
                     style={{ top: watermarkPos.top, left: watermarkPos.left }}
                   >
-                    {student?.email} • IP Protected
+                    {student?.username || student?.full_name || 'STUDENT'} • IP Protected
                   </div>
 
                   <div className="text-center space-y-3 z-10">
@@ -637,7 +659,7 @@ export default function StudentDashboard() {
                 >
                   {allCourses.map((c: any) => (
                     <option key={c.id} value={c.id}>
-                      [{c.category} • {c.type.toUpperCase()}] {c.title}
+                      [{c.category || 'Class'} • {c.type ? c.type.toUpperCase() : 'THEORY'}] {c.title}
                     </option>
                   ))}
                 </select>
@@ -646,7 +668,7 @@ export default function StudentDashboard() {
               {targetSlipCourse && (
                 <div className="flex items-center justify-between p-3 rounded-xl bg-slate-950 border border-slate-800/80 text-xs">
                   <span className="text-slate-400">මාසික පන්ති ගාස්තුව:</span>
-                  <span className="font-mono font-bold text-emerald-400 text-sm">Rs. {targetSlipCourse.monthly_fee}/-</span>
+                  <span className="font-mono font-bold text-emerald-400 text-sm">Rs. {targetSlipCourse.monthly_fee || '2500'}/-</span>
                 </div>
               )}
 
