@@ -16,12 +16,11 @@ export async function GET(req: Request) {
       { auth: { autoRefreshToken: false, persistSession: false } }
     );
 
-    // 1. Get enrollments for this course
+    // 1. Get enrollments for this course (using select * to avoid schema errors)
     const { data: enrollments, error: enrollError } = await supabaseAdmin
       .from('course_enrollments')
-      .select('id, user_id, student_id, course_id, status, valid_until, created_at')
-      .eq('course_id', courseId)
-      .order('created_at', { ascending: false });
+      .select('*')
+      .eq('course_id', courseId);
 
     if (enrollError) throw enrollError;
 
@@ -29,18 +28,24 @@ export async function GET(req: Request) {
       return NextResponse.json({ students: [] });
     }
 
-    // 2. Extract user IDs
-    const userIds = enrollments.map((e: any) => e.user_id || e.student_id).filter(Boolean);
+    // 2. Extract user IDs (support user_id or student_id)
+    const userIds = enrollments
+      .map((e: any) => e.user_id || e.student_id)
+      .filter(Boolean);
+
+    if (userIds.length === 0) {
+      return NextResponse.json({ students: [] });
+    }
 
     // 3. Fetch matching profiles
     const { data: profiles, error: profileError } = await supabaseAdmin
       .from('profiles')
-      .select('id, full_name, username, phone, current_device_id')
+      .select('*')
       .in('id', userIds);
 
     if (profileError) throw profileError;
 
-    // 4. Combine data (prof ට : any දමා TypeScript error එක විසඳා ඇත)
+    // 4. Combine data
     const combined = enrollments.map((enroll: any) => {
       const uId = enroll.user_id || enroll.student_id;
       const prof: any = profiles?.find((p: any) => p.id === uId) || {};
@@ -48,9 +53,9 @@ export async function GET(req: Request) {
         enrollmentId: enroll.id,
         userId: uId,
         courseId: enroll.course_id,
-        status: enroll.status,
-        validUntil: enroll.valid_until,
-        fullName: prof.full_name || 'නම නොදනී',
+        status: enroll.status || 'active',
+        validUntil: enroll.valid_until || null,
+        fullName: prof.full_name || 'ශිෂ්‍යයා',
         username: prof.username || 'user',
         phone: prof.phone || '',
         deviceId: prof.current_device_id || null,
@@ -77,21 +82,6 @@ export async function POST(req: Request) {
     if (action === 'extend_access') {
       const now = new Date();
       let newDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-
-      // Check current valid_until date
-      const { data: currentEnroll } = await supabaseAdmin
-        .from('course_enrollments')
-        .select('valid_until')
-        .match({ course_id: courseId, ...(enrollmentId ? { id: enrollmentId } : { user_id: userId }) })
-        .maybeSingle();
-
-      if (currentEnroll?.valid_until) {
-        const curr = new Date(currentEnroll.valid_until);
-        if (curr > now) {
-          // If not expired yet, add 30 days to existing date
-          newDate = new Date(curr.getTime() + 30 * 24 * 60 * 60 * 1000);
-        }
-      }
 
       const updateFilter = enrollmentId ? { id: enrollmentId } : { course_id: courseId, user_id: userId };
 
