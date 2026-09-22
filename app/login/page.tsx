@@ -3,10 +3,10 @@
 import React, { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { ShieldCheck, Lock, Mail, AlertCircle, Loader2 } from 'lucide-react';
+import { ShieldCheck, Lock, User, AlertCircle, Loader2 } from 'lucide-react';
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState(''); // Username හෝ Email
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -18,14 +18,20 @@ export default function LoginPage() {
     setErrorMsg('');
 
     try {
+      const cleanInput = identifier.trim();
+      // Username එකක් ඇතුළත් කළහොත් (@ නැතිනම්) internal email එක background එකෙන් සාදයි
+      const loginEmail = cleanInput.includes('@')
+        ? cleanInput
+        : `${cleanInput.toLowerCase()}@guru.internal`;
+
       // 1. Supabase Auth හරහා Login වීම
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email,
+        email: loginEmail,
         password,
       });
 
       if (authError || !authData.user) {
-        throw new Error(authError?.message || 'Login අසාර්ථක විය. Email හෝ Password පරීක්ෂා කරන්න.');
+        throw new Error('Login අසාර්ථක විය. Username හෝ Password නිවැරදි දැයි පරීක්ෂා කරන්න.');
       }
 
       const userId = authData.user.id;
@@ -89,15 +95,17 @@ export default function LoginPage() {
 
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
-            <label className="text-xs font-medium text-slate-400 block mb-1.5">Email ලිපිනය</label>
+            <label className="text-xs font-medium text-slate-400 block mb-1.5">
+              Username හෝ Email ලිපිනය
+            </label>
             <div className="relative">
-              <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
+              <User className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
               <input
-                type="email"
+                type="text"
                 required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="student@guru.com"
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
+                placeholder="Username (උදා: s801)"
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 transition"
               />
             </div>
