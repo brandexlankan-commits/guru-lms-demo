@@ -40,10 +40,10 @@ export async function GET(req: Request) {
 
     if (profileError) throw profileError;
 
-    // 4. Combine data
+    // 4. Combine data (prof ට : any දමා TypeScript error එක විසඳා ඇත)
     const combined = enrollments.map((enroll: any) => {
       const uId = enroll.user_id || enroll.student_id;
-      const prof = profiles?.find((p: any) => p.id === uId) || {};
+      const prof: any = profiles?.find((p: any) => p.id === uId) || {};
       return {
         enrollmentId: enroll.id,
         userId: uId,
