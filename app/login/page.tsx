@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { ShieldCheck, Lock, User, AlertCircle, Loader2 } from 'lucide-react';
 
 export default function LoginPage() {
-  const [identifier, setIdentifier] = useState(''); // Username හෝ Email
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -19,7 +19,6 @@ export default function LoginPage() {
 
     try {
       const cleanInput = identifier.trim();
-      // Username එකක් ඇතුළත් කළහොත් (@ නැතිනම්) internal email එක background එකෙන් සාදයි
       const loginEmail = cleanInput.includes('@')
         ? cleanInput
         : `${cleanInput.toLowerCase()}@guru.internal`;
@@ -31,21 +30,20 @@ export default function LoginPage() {
       });
 
       if (authError || !authData.user) {
-        throw new Error('Login අසාර්ථක විය. Username හෝ Password නිවැරදි දැයි පරීක්ෂා කරන්න.');
+        throw new Error('Login අසාර්ථක විය. Username හෝ Password පරීක්ෂා කරන්න.');
       }
 
       const userId = authData.user.id;
 
       // 2. Profile එක සහ Role එක ලබාගැනීම
-      const { data: profile, error: profileError } = await supabase
+      const { data: profile } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
 
-      if (profileError || !profile) {
-        throw new Error('පරිශීලක පැතිකඩ (Profile) හමු නොවීය.');
-      }
+      // Role එක Profiles table එකෙන් හෝ Auth User Metadata එකෙන් ලබාගනී
+      const userRole = profile?.role || authData.user.user_metadata?.role || 'student';
 
       // 3. Single-Device Protection Logic
       let localDeviceId = localStorage.getItem('guru_device_id');
@@ -54,14 +52,18 @@ export default function LoginPage() {
         localStorage.setItem('guru_device_id', localDeviceId);
       }
 
-      // Database එකේ current_device_id එක මේ Device එකට Update කිරීම
+      // Profiles table එකේ device_id එක save කිරීම (failsafe)
       await supabase
         .from('profiles')
-        .update({ current_device_id: localDeviceId })
-        .eq('id', userId);
+        .upsert({
+          id: userId,
+          current_device_id: localDeviceId,
+          role: userRole,
+          username: authData.user.user_metadata?.username || cleanInput,
+        });
 
       // 4. Role එක අනුව Dashboard එකට යොමු කිරීම
-      if (profile.role === 'teacher' || profile.role === 'admin') {
+      if (userRole === 'teacher' || userRole === 'admin') {
         router.push('/admin/dashboard');
       } else {
         router.push('/student/dashboard');
