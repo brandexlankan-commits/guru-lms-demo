@@ -1,12 +1,12 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase'; // ඔබගේ supabase client import එක
+import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 
 export default function AdminDashboard() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'classes' | 'courses' | 'slips' | 'devices' | 'students'>('classes');
+  const [activeTab, setActiveTab] = useState<'classes' | 'courses' | 'slips' | 'devices' | 'students'>('students');
 
   // Courses state
   const [courses, setCourses] = useState<any[]>([]);
@@ -35,9 +35,8 @@ export default function AdminDashboard() {
       // Fallback demo courses if table is empty
       setCourses([
         { id: 'c1', title: 'Grade 7 Science - Theory Masterclass' },
-        { id: 'c2', title: 'Grade 8 Science - Theory Masterclass' },
-        { id: 'c3', title: '2026 A/L Biology - Theory' },
-        { id: 'c4', title: '2026 A/L Biology - Paper Class' }
+        { id: 'c2', title: 'Grade 7 Science - Paper Class' },
+        { id: 'c3', title: 'Grade 8 Science - Full Syllabus' }
       ]);
     }
   };
@@ -77,7 +76,8 @@ export default function AdminDashboard() {
 
     setIsSubmitting(true);
     try {
-      const res = await fetch('/api/admin/create-student', {
+      // Corrected API endpoint matching app/api/create-student/route.ts
+      const res = await fetch('/api/create-student', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -359,7 +359,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* TAB 2: CLASSES & VIDEOS (Existing content) */}
+        {/* TAB 2: CLASSES & VIDEOS */}
         {activeTab === 'classes' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div className="bg-[#0c1322] border border-slate-800/80 rounded-2xl p-6 shadow-xl">
