@@ -16,7 +16,7 @@ export async function GET(req: Request) {
       { auth: { autoRefreshToken: false, persistSession: false } }
     );
 
-    // 1. Get enrollments for this course (using select * to avoid schema errors)
+    // 1. Get enrollments for this course
     const { data: enrollments, error: enrollError } = await supabaseAdmin
       .from('course_enrollments')
       .select('*')
@@ -28,7 +28,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ students: [] });
     }
 
-    // 2. Extract user IDs (support user_id or student_id)
+    // 2. Extract user IDs
     const userIds = enrollments
       .map((e: any) => e.user_id || e.student_id)
       .filter(Boolean);
@@ -37,28 +37,59 @@ export async function GET(req: Request) {
       return NextResponse.json({ students: [] });
     }
 
-    // 3. Fetch matching profiles
-    const { data: profiles, error: profileError } = await supabaseAdmin
+    // 3. Fetch matching profiles from database
+    const { data: profiles } = await supabaseAdmin
       .from('profiles')
       .select('*')
       .in('id', userIds);
 
-    if (profileError) throw profileError;
+    // 4. Fetch auth users to get full_name, username, phone guaranteed from metadata
+    const authUsersResults = await Promise.all(
+      userIds.map((uId: string) => supabaseAdmin.auth.admin.getUserById(uId))
+    );
 
-    // 4. Combine data
+    const authUsersMap = new Map();
+    authUsersResults.forEach((res) => {
+      if (res.data?.user) {
+        authUsersMap.set(res.data.user.id, res.data.user);
+      }
+    });
+
+    // 5. Combine data accurately
     const combined = enrollments.map((enroll: any) => {
       const uId = enroll.user_id || enroll.student_id;
       const prof: any = profiles?.find((p: any) => p.id === uId) || {};
+      const authUser = authUsersMap.get(uId);
+
+      const fullName =
+        prof.full_name ||
+        authUser?.user_metadata?.full_name ||
+        authUser?.user_metadata?.name ||
+        'නම නොදනී';
+
+      const username =
+        prof.username ||
+        authUser?.user_metadata?.username ||
+        authUser?.email?.split('@')[0] ||
+        'user';
+
+      const phone =
+        prof.phone ||
+        authUser?.user_metadata?.phone ||
+        '';
+
+      const deviceId = prof.current_device_id || null;
+
       return {
         enrollmentId: enroll.id,
         userId: uId,
         courseId: enroll.course_id,
         status: enroll.status || 'active',
         validUntil: enroll.valid_until || null,
-        fullName: prof.full_name || 'ශිෂ්‍යයා',
-        username: prof.username || 'user',
-        phone: prof.phone || '',
-        deviceId: prof.current_device_id || null,
+        fullName,
+        username,
+        phone,
+        deviceId,
       };
     });
 
