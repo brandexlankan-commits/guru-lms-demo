@@ -6,7 +6,7 @@ import {
   BookOpen, Video, Users, Plus, Trash2, ArrowLeft, 
   Calendar, Clock, Link as LinkIcon, Film, PlayCircle,
   CheckCircle, AlertCircle, X, Shield, RefreshCw, Smartphone,
-  Search, Unlock, Lock, PhoneCall, CreditCard, Eye, Check, ExternalLink
+  Search, Unlock, Lock, PhoneCall, CreditCard, Eye, Check, ExternalLink, Sparkles
 } from 'lucide-react';
 
 export default function AdminDashboard() {
@@ -35,13 +35,13 @@ export default function AdminDashboard() {
   const [newCourseFee, setNewCourseFee] = useState('1500');
   const [creatingCourse, setCreatingCourse] = useState(false);
 
-  // Live Class / Recording form states
+  // Live Class form states (Auto-generated - No manual URL needed)
   const [schedTitle, setSchedTitle] = useState('');
   const [schedDate, setSchedDate] = useState('');
   const [schedTime, setSchedTime] = useState('19:00');
-  const [schedZoomUrl, setSchedZoomUrl] = useState('');
   const [savingLiveClass, setSavingLiveClass] = useState(false);
 
+  // Recordings form states
   const [recTitle, setRecTitle] = useState('');
   const [recDate, setRecDate] = useState('');
   const [recDuration, setRecDuration] = useState('2h 30m');
@@ -323,6 +323,7 @@ export default function AdminDashboard() {
     }
   };
 
+  // Auto-creates Zoom Meeting via Backend API (No Manual URL)
   const handleSaveLiveClass = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCourseForManage) return;
@@ -337,16 +338,14 @@ export default function AdminDashboard() {
           title: schedTitle,
           date: schedDate,
           time: schedTime,
-          zoom_join_url: schedZoomUrl,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
-      alert('සජීවී Zoom පන්තිය සාර්ථකව Schedule කරන ලදී!');
+      alert(data.message || 'සජීවී Zoom පන්තිය සාර්ථකව Schedule කරන ලදී!');
       setCourseLiveClass(data.liveClass);
       setSchedTitle('');
-      setSchedZoomUrl('');
     } catch (err: any) {
       alert('දෝෂයකි: ' + err.message);
     } finally {
@@ -611,7 +610,7 @@ export default function AdminDashboard() {
         <nav className="flex flex-wrap items-center gap-2 bg-[#0d1424] p-1.5 rounded-xl border border-slate-800">
           <button
             onClick={() => { setActiveTab('courses'); setSelectedCourseForManage(null); }}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition cursor-pointer ${
               activeTab === 'courses' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
             }`}
           >
@@ -619,7 +618,7 @@ export default function AdminDashboard() {
           </button>
           <button
             onClick={() => setActiveTab('students')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition cursor-pointer ${
               activeTab === 'students' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
             }`}
           >
@@ -627,7 +626,7 @@ export default function AdminDashboard() {
           </button>
           <button
             onClick={() => setActiveTab('devices')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition cursor-pointer ${
               activeTab === 'devices' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
             }`}
           >
@@ -635,7 +634,7 @@ export default function AdminDashboard() {
           </button>
           <button
             onClick={() => setActiveTab('slips')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition relative ${
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition cursor-pointer relative ${
               activeTab === 'slips' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
             }`}
           >
@@ -663,7 +662,7 @@ export default function AdminDashboard() {
                   <div className="flex items-center gap-3">
                     <button
                       onClick={() => setSelectedCourseForManage(null)}
-                      className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition flex items-center gap-1.5 text-xs font-semibold"
+                      className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition flex items-center gap-1.5 text-xs font-semibold cursor-pointer"
                     >
                       <ArrowLeft className="w-4 h-4" />
                       <span>සියලු පන්ති වෙත</span>
@@ -683,7 +682,7 @@ export default function AdminDashboard() {
 
                   <button
                     onClick={() => handleDeleteCourse(selectedCourseForManage.id, selectedCourseForManage.title)}
-                    className="px-3.5 py-2 rounded-xl bg-red-600/10 border border-red-500/30 hover:bg-red-600 hover:text-white text-red-400 text-xs font-semibold transition flex items-center gap-1.5"
+                    className="px-3.5 py-2 rounded-xl bg-red-600/10 border border-red-500/30 hover:bg-red-600 hover:text-white text-red-400 text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer"
                   >
                     <Trash2 className="w-4 h-4" />
                     <span>මෙම පන්තිය Delete කරන්න</span>
@@ -694,7 +693,8 @@ export default function AdminDashboard() {
                   <div className="p-16 text-center text-slate-400">පන්තියේ දත්ත ලබාගනිමින් පවතී...</div>
                 ) : (
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    {/* Live Zoom Class */}
+                    
+                    {/* Live Zoom Class Section */}
                     <div className="bg-[#0c1322] border border-slate-800/80 rounded-2xl p-6 shadow-xl space-y-6">
                       <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                         <div className="flex items-center gap-2">
@@ -717,7 +717,8 @@ export default function AdminDashboard() {
                             </div>
                             <button
                               onClick={() => handleDeleteLiveClass(courseLiveClass.id)}
-                              className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition"
+                              className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition cursor-pointer"
+                              title="Schedule එක ඉවත් කරන්න"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -726,15 +727,20 @@ export default function AdminDashboard() {
                             <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-purple-400" /> {courseLiveClass.date}</span>
                             <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-purple-400" /> {courseLiveClass.time}</span>
                           </div>
-                          <a
-                            href={courseLiveClass.zoom_join_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1.5 text-xs text-blue-400 hover:underline pt-1 break-all"
-                          >
-                            <LinkIcon className="w-3.5 h-3.5 shrink-0" />
-                            <span>{courseLiveClass.zoom_join_url}</span>
-                          </a>
+                          <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-xs">
+                            <span className="text-slate-400 flex items-center gap-1 text-[11px]">
+                              🛡️ <strong className="text-emerald-400">Anti-Leak Gateway:</strong> Zoom Link එක Auto ආරක්ෂිතයි
+                            </span>
+                            <a
+                              href={courseLiveClass.zoom_join_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-purple-400 hover:underline inline-flex items-center gap-1 text-[11px]"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              <span>පරීක්ෂා කරන්න (Test)</span>
+                            </a>
+                          </div>
                         </div>
                       ) : (
                         <div className="p-4 rounded-xl bg-slate-900/50 border border-dashed border-slate-800 text-center text-xs text-slate-500">
@@ -742,8 +748,17 @@ export default function AdminDashboard() {
                         </div>
                       )}
 
+                      {/* 1-Click Auto Zoom Schedule Form */}
                       <form onSubmit={handleSaveLiveClass} className="space-y-4 pt-2">
-                        <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">නව Zoom පන්තියක් Schedule කරන්න</h4>
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                            {courseLiveClass ? 'අලුත් Zoom පන්තියක් Schedule කිරීම (Update)' : 'නව Zoom පන්තියක් Schedule කරන්න'}
+                          </h4>
+                          <span className="text-[10px] text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/20 font-semibold flex items-center gap-1">
+                            <Sparkles className="w-3 h-3" /> Auto-Generated
+                          </span>
+                        </div>
+
                         <div>
                           <label className="block text-xs text-slate-400 mb-1">පාඩමේ මාතෘකාව *</label>
                           <input
@@ -755,6 +770,7 @@ export default function AdminDashboard() {
                             className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-purple-500"
                           />
                         </div>
+
                         <div className="grid grid-cols-2 gap-4">
                           <div>
                             <label className="block text-xs text-slate-400 mb-1">දිනය</label>
@@ -777,28 +793,19 @@ export default function AdminDashboard() {
                             />
                           </div>
                         </div>
-                        <div>
-                          <label className="block text-xs text-slate-400 mb-1">Zoom Meeting Join URL *</label>
-                          <input
-                            type="url"
-                            required
-                            placeholder="https://us02web.zoom.us/j/..."
-                            value={schedZoomUrl}
-                            onChange={(e) => setSchedZoomUrl(e.target.value)}
-                            className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-purple-500"
-                          />
-                        </div>
+
+                        {/* Direct 1-Click Auto Creation Button (No manual join URL input needed!) */}
                         <button
                           type="submit"
                           disabled={savingLiveClass}
-                          className="w-full bg-purple-600 hover:bg-purple-500 text-white font-semibold py-2.5 rounded-xl text-xs transition shadow-lg shadow-purple-600/20 disabled:opacity-50"
+                          className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold py-3 rounded-xl text-xs transition shadow-lg shadow-purple-600/30 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
                         >
-                          {savingLiveClass ? 'Schedule වෙමින් පවතී...' : '📅 මෙම පන්තියට Zoom Link එක Publish කරන්න'}
+                          {savingLiveClass ? 'Zoom Meeting එක සෑදෙමින් පවතී...' : '⚡ Zoom Class එක Auto සාදා Publish කරන්න'}
                         </button>
                       </form>
                     </div>
 
-                    {/* Recordings */}
+                    {/* Recordings Management Section */}
                     <div className="bg-[#0c1322] border border-slate-800/80 rounded-2xl p-6 shadow-xl space-y-6">
                       <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                         <div className="flex items-center gap-2">
@@ -857,7 +864,7 @@ export default function AdminDashboard() {
                         <button
                           type="submit"
                           disabled={savingRecording}
-                          className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-2.5 rounded-xl text-xs transition shadow-lg shadow-blue-600/20 disabled:opacity-50"
+                          className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-2.5 rounded-xl text-xs transition shadow-lg shadow-blue-600/20 disabled:opacity-50 cursor-pointer"
                         >
                           {savingRecording ? 'එක්වෙමින් පවතී...' : '+ Recording එක Playlist එකට දමන්න'}
                         </button>
@@ -879,7 +886,7 @@ export default function AdminDashboard() {
                               </div>
                               <button
                                 onClick={() => handleDeleteRecording(rec.id)}
-                                className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition"
+                                className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition cursor-pointer"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -985,7 +992,7 @@ export default function AdminDashboard() {
             <div className="flex border-b border-slate-800 gap-4">
               <button
                 onClick={() => setStudentSubTab('register')}
-                className={`pb-3 text-sm font-semibold transition border-b-2 ${
+                className={`pb-3 text-sm font-semibold transition border-b-2 cursor-pointer ${
                   studentSubTab === 'register' ? 'border-purple-500 text-purple-400' : 'border-transparent text-slate-400 hover:text-slate-200'
                 }`}
               >
@@ -993,7 +1000,7 @@ export default function AdminDashboard() {
               </button>
               <button
                 onClick={() => setStudentSubTab('list')}
-                className={`pb-3 text-sm font-semibold transition border-b-2 ${
+                className={`pb-3 text-sm font-semibold transition border-b-2 cursor-pointer ${
                   studentSubTab === 'list' ? 'border-purple-500 text-purple-400' : 'border-transparent text-slate-400 hover:text-slate-200'
                 }`}
               >
@@ -1058,7 +1065,7 @@ export default function AdminDashboard() {
                     <div>
                       <div className="flex justify-between items-center mb-1.5">
                         <label className="text-xs font-medium text-slate-300">තාවකාලික මුරපදය (Password) *</label>
-                        <button type="button" onClick={generateRandomPassword} className="text-xs text-purple-400 hover:underline">
+                        <button type="button" onClick={generateRandomPassword} className="text-xs text-purple-400 hover:underline cursor-pointer">
                           🔄 අලුත් Password එකක් සාදන්න
                         </button>
                       </div>
@@ -1091,7 +1098,7 @@ export default function AdminDashboard() {
                     <button
                       type="submit"
                       disabled={isSubmitting}
-                      className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold py-3.5 rounded-xl transition duration-200 shadow-lg shadow-purple-600/20 disabled:opacity-50"
+                      className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold py-3.5 rounded-xl transition duration-200 shadow-lg shadow-purple-600/20 disabled:opacity-50 cursor-pointer"
                     >
                       {isSubmitting ? 'ශිෂ්‍යයා ලියාපදිංචි වෙමින් පවතී...' : '+ ශිෂ්‍යයා ලියාපදිංචි කර ඇතුළත් කරන්න'}
                     </button>
@@ -1115,7 +1122,7 @@ export default function AdminDashboard() {
                             navigator.clipboard.writeText(generateWhatsAppMessage());
                             alert('WhatsApp Message එක Copy කරගන්නා ලදී!');
                           }}
-                          className="flex-1 bg-slate-800 hover:bg-slate-700 text-white py-2.5 px-4 rounded-xl text-xs font-semibold transition text-center"
+                          className="flex-1 bg-slate-800 hover:bg-slate-700 text-white py-2.5 px-4 rounded-xl text-xs font-semibold transition text-center cursor-pointer"
                         >
                           📋 Copy Details
                         </button>
@@ -1151,7 +1158,7 @@ export default function AdminDashboard() {
                     <button
                       key={course.id}
                       onClick={() => setSelectedFilterCourse(course.id.toString())}
-                      className={`px-4 py-2 rounded-xl text-xs font-semibold transition ${
+                      className={`px-4 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
                         selectedFilterCourse === course.id.toString()
                           ? 'bg-purple-600 text-white shadow-md'
                           : 'bg-[#131c31] text-slate-400 hover:text-white'
@@ -1248,7 +1255,7 @@ export default function AdminDashboard() {
                                     <button
                                       disabled={actionLoadingId === `extend_${st.userId}`}
                                       onClick={() => handleExtendAccess(st)}
-                                      className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[11px] transition shadow-md shadow-emerald-600/20 disabled:opacity-50"
+                                      className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[11px] transition shadow-md shadow-emerald-600/20 disabled:opacity-50 cursor-pointer"
                                     >
                                       {actionLoadingId === `extend_${st.userId}` ? '...' : '+30 Days ගාස්තු සක්‍රිය'}
                                     </button>
@@ -1257,7 +1264,7 @@ export default function AdminDashboard() {
                                       <button
                                         disabled={actionLoadingId === `reset_${st.userId}`}
                                         onClick={() => handleResetDevice(st)}
-                                        className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-red-500/20 text-slate-300 hover:text-red-400 border border-slate-700 transition text-[11px]"
+                                        className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-red-500/20 text-slate-300 hover:text-red-400 border border-slate-700 transition text-[11px] cursor-pointer"
                                         title="උපාංගය Reset කරන්න"
                                       >
                                         {actionLoadingId === `reset_${st.userId}` ? '...' : '🔄 Reset Device'}
@@ -1419,12 +1426,10 @@ export default function AdminDashboard() {
         )}
 
         {/* ============================================================== */}
-        {/* TAB 4: SLIP APPROVALS (VERIFY AND ACTIVATE ENROLLMENT) */}
+        {/* TAB 4: SLIP APPROVALS */}
         {/* ============================================================== */}
         {activeTab === 'slips' && (
           <div className="space-y-6">
-            
-            {/* Top Stat Summary Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
               <div className="bg-[#0c1322] border border-slate-800 p-5 rounded-2xl flex items-center justify-between shadow-xl">
                 <div>
@@ -1467,9 +1472,7 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            {/* Filter Tabs & Search Bar */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-[#0c1322] border border-slate-800 p-4 rounded-2xl shadow-xl">
-              
               <div className="flex items-center gap-2 bg-[#131c31] p-1.5 rounded-xl border border-slate-800 w-full sm:w-auto">
                 <button
                   onClick={() => setSlipFilter('pending')}
@@ -1531,7 +1534,6 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            {/* Slips Grid / List */}
             {loadingSlips ? (
               <div className="p-16 text-center text-slate-400 text-sm">බැංකු රිසිට්පත් ලබාගනිමින් පවතී...</div>
             ) : filteredSlips.length === 0 ? (
@@ -1557,7 +1559,6 @@ export default function AdminDashboard() {
                       className="bg-[#0c1322] border border-slate-800/90 rounded-2xl p-5 shadow-xl flex flex-col justify-between space-y-4 hover:border-slate-700 transition"
                     >
                       <div className="space-y-3">
-                        {/* Header: Status and Date */}
                         <div className="flex items-center justify-between">
                           <span
                             className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${
@@ -1573,7 +1574,6 @@ export default function AdminDashboard() {
                           <span className="text-[10px] text-slate-500">{formattedDate}</span>
                         </div>
 
-                        {/* Student Details */}
                         <div>
                           <h4 className="text-sm font-bold text-white">{slip.studentName}</h4>
                           <div className="flex items-center gap-3 text-xs text-slate-400 mt-0.5">
@@ -1591,7 +1591,6 @@ export default function AdminDashboard() {
                           </div>
                         </div>
 
-                        {/* Course & Amount */}
                         <div className="p-3 rounded-xl bg-[#131c31] border border-slate-800 space-y-1 text-xs">
                           <div className="text-slate-400 text-[10px]">අදාළ පන්තිය:</div>
                           <div className="font-semibold text-slate-200 line-clamp-1">{slip.course_name || 'පන්තිය'}</div>
@@ -1601,7 +1600,6 @@ export default function AdminDashboard() {
                           </div>
                         </div>
 
-                        {/* Slip Image Thumbnail */}
                         <div
                           onClick={() => setPreviewSlip(slip)}
                           className="relative aspect-video rounded-xl bg-slate-900 border border-slate-800 overflow-hidden cursor-pointer group flex items-center justify-center"
@@ -1618,7 +1616,6 @@ export default function AdminDashboard() {
                         </div>
                       </div>
 
-                      {/* Action Buttons */}
                       <div className="pt-2 border-t border-slate-800/80">
                         {slip.status === 'pending' ? (
                           <div className="flex items-center gap-2">
@@ -1650,7 +1647,6 @@ export default function AdminDashboard() {
                 })}
               </div>
             )}
-
           </div>
         )}
 
@@ -1664,7 +1660,7 @@ export default function AdminDashboard() {
           <div className="bg-[#0c1322] border border-slate-800 max-w-2xl w-full rounded-3xl p-6 space-y-5 shadow-2xl relative max-h-[90vh] overflow-y-auto">
             <button
               onClick={() => setPreviewSlip(null)}
-              className="absolute right-5 top-5 p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white"
+              className="absolute right-5 top-5 p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
@@ -1684,7 +1680,6 @@ export default function AdminDashboard() {
               </span>
             </div>
 
-            {/* Slip Image Full */}
             <div className="rounded-2xl border border-slate-800 overflow-hidden bg-slate-950 flex items-center justify-center max-h-[60vh]">
               <img
                 src={previewSlip.slip_url}
@@ -1693,7 +1688,6 @@ export default function AdminDashboard() {
               />
             </div>
 
-            {/* Bottom Actions */}
             <div className="flex items-center justify-between gap-3 pt-2">
               <a
                 href={previewSlip.slip_url}
@@ -1710,21 +1704,20 @@ export default function AdminDashboard() {
                   <button
                     disabled={processingSlipId === previewSlip.id}
                     onClick={() => handleRejectSlip(previewSlip)}
-                    className="px-4 py-2.5 rounded-xl bg-red-600/10 border border-red-500/30 hover:bg-red-600 hover:text-white text-red-400 text-xs font-bold transition"
+                    className="px-4 py-2.5 rounded-xl bg-red-600/10 border border-red-500/30 hover:bg-red-600 hover:text-white text-red-400 text-xs font-bold transition cursor-pointer"
                   >
                     ප්‍රතික්ෂේප කරන්න
                   </button>
                   <button
                     disabled={processingSlipId === previewSlip.id}
                     onClick={() => handleApproveSlip(previewSlip)}
-                    className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition shadow-lg shadow-emerald-600/20"
+                    className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition shadow-lg shadow-emerald-600/20 cursor-pointer"
                   >
                     {processingSlipId === previewSlip.id ? 'Approve වෙමින්...' : '✅ Approve (+30 Days Access)'}
                   </button>
                 </div>
               )}
             </div>
-
           </div>
         </div>
       )}
@@ -1737,7 +1730,7 @@ export default function AdminDashboard() {
           <div className="bg-[#0c1322] border border-slate-800 max-w-md w-full rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl relative">
             <button
               onClick={() => setShowAddCourseModal(false)}
-              className="absolute right-5 top-5 p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white"
+              className="absolute right-5 top-5 p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>

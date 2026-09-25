@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { createAutoZoomMeeting } from '@/lib/zoom';
 
 function getAdminClient() {
   return createClient(
@@ -16,7 +17,6 @@ export async function GET(req: Request) {
     const courseId = searchParams.get('courseId');
 
     if (courseId) {
-      // 1. Fetch single course details with its live class and recordings
       const { data: course, error: cErr } = await supabaseAdmin
         .from('courses')
         .select('*')
@@ -53,7 +53,6 @@ export async function GET(req: Request) {
       });
     }
 
-    // 2. Fetch all courses with student counts
     const { data: courses, error } = await supabaseAdmin
       .from('courses')
       .select('*')
@@ -124,7 +123,6 @@ export async function POST(req: Request) {
       const { courseId } = body;
       if (!courseId) return NextResponse.json({ error: 'Course ID is required' }, { status: 400 });
 
-      // Clean up linked data first
       await supabaseAdmin.from('live_classes').delete().eq('course_id', courseId);
       await supabaseAdmin.from('recordings').delete().eq('course_id', courseId);
       await supabaseAdmin.from('course_enrollments').delete().eq('course_id', courseId);
@@ -135,14 +133,22 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, message: 'පාඨමාලාව සාර්ථකව ඉවත් කරන ලදී.' });
     }
 
-    // ACTION 3: SCHEDULE LIVE ZOOM CLASS
+    // ACTION 3: AUTO SCHEDULE ZOOM MEETING (NO MANUAL URL NEEDED)
     if (action === 'schedule_live_class') {
-      const { courseId, title, date, time, zoom_join_url } = body;
-      if (!courseId || !title || !zoom_join_url) {
-        return NextResponse.json({ error: 'මාතෘකාව සහ Zoom Join URL අනිවාර්යයි.' }, { status: 400 });
+      const { courseId, title, date, time } = body;
+      if (!courseId || !title) {
+        return NextResponse.json({ error: 'මාතෘකාව අනිවාර්යයි.' }, { status: 400 });
       }
 
-      // Replace existing live class for this course
+      const startDateTime = `${date || new Date().toISOString().split('T')[0]}T${time || '19:00'}:00`;
+      
+      // Auto-create Zoom meeting via Zoom API (or mock mode)
+      const zoomMeeting = await createAutoZoomMeeting(title, startDateTime);
+
+      // Student will use this secure proxy route to join
+      const secureJoinUrl = `/api/zoom/join?courseId=${courseId}&meetingId=${zoomMeeting.meetingId}`;
+
+      // Clean old live class
       await supabaseAdmin.from('live_classes').delete().eq('course_id', courseId);
 
       const { data, error } = await supabaseAdmin
@@ -153,14 +159,21 @@ export async function POST(req: Request) {
             title,
             date: date || new Date().toISOString().split('T')[0],
             time: time || '19:00',
-            zoom_join_url,
+            zoom_join_url: secureJoinUrl,
           },
         ])
         .select()
         .single();
 
       if (error) throw error;
-      return NextResponse.json({ success: true, liveClass: data });
+      return NextResponse.json({ 
+        success: true, 
+        liveClass: data,
+        isMock: zoomMeeting.isMock,
+        message: zoomMeeting.isMock 
+          ? 'Zoom Meeting එක සකස් විය (Simulation Mode).'
+          : 'Zoom Meeting එක සජීවීව සාර්ථකව Schedule කරන ලදී!'
+      });
     }
 
     // ACTION 4: DELETE LIVE CLASS
@@ -175,7 +188,7 @@ export async function POST(req: Request) {
     if (action === 'add_recording') {
       const { courseId, title, lesson_date, duration, video_id } = body;
       if (!courseId || !title || !video_id) {
-        return NextResponse.json({ error: 'මාතෘකාව සහ Bunny Video ID අනිවාර්යයි.' }, { status: 400 });
+        return NextResponse.json({ error: 'මාතෘකාව සහ Video ID අනිවාර්යයි.' }, { status: 400 });
       }
 
       const { data, error } = await supabaseAdmin
