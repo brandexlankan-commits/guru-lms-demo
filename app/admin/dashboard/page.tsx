@@ -5,11 +5,12 @@ import { supabase } from '@/lib/supabase';
 import { 
   BookOpen, Video, Users, Plus, Trash2, ArrowLeft, 
   Calendar, Clock, Link as LinkIcon, Film, PlayCircle,
-  CheckCircle, AlertCircle, X, Shield, RefreshCw
+  CheckCircle, AlertCircle, X, Shield, RefreshCw, Smartphone,
+  Search, Unlock, Lock, PhoneCall
 } from 'lucide-react';
 
 export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState<'classes' | 'courses' | 'slips' | 'devices' | 'students'>('courses');
+  const [activeTab, setActiveTab] = useState<'courses' | 'students' | 'slips' | 'devices'>('courses');
 
   // Sub-tabs inside Students Tab
   const [studentSubTab, setStudentSubTab] = useState<'register' | 'list'>('register');
@@ -34,14 +35,13 @@ export default function AdminDashboard() {
   const [newCourseFee, setNewCourseFee] = useState('1500');
   const [creatingCourse, setCreatingCourse] = useState(false);
 
-  // Schedule Live Class Form inside Course Management
+  // Live Class / Recording form states
   const [schedTitle, setSchedTitle] = useState('');
   const [schedDate, setSchedDate] = useState('');
   const [schedTime, setSchedTime] = useState('19:00');
   const [schedZoomUrl, setSchedZoomUrl] = useState('');
   const [savingLiveClass, setSavingLiveClass] = useState(false);
 
-  // Add Recording Form inside Course Management
   const [recTitle, setRecTitle] = useState('');
   const [recDate, setRecDate] = useState('');
   const [recDuration, setRecDuration] = useState('2h 30m');
@@ -58,11 +58,17 @@ export default function AdminDashboard() {
   const [formError, setFormError] = useState('');
   const [createdStudentData, setCreatedStudentData] = useState<any>(null);
 
-  // Enrolled Students List State
+  // Class-wise Students List State
   const [studentsList, setStudentsList] = useState<any[]>([]);
   const [loadingStudents, setLoadingStudents] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+
+  // Devices Hub State
+  const [deviceStats, setDeviceStats] = useState({ totalStudents: 0, lockedCount: 0, unlockedCount: 0 });
+  const [devicesList, setDevicesList] = useState<any[]>([]);
+  const [loadingDevices, setLoadingDevices] = useState(false);
+  const [searchDeviceQuery, setSearchDeviceQuery] = useState('');
 
   useEffect(() => {
     fetchCourses();
@@ -72,6 +78,9 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (activeTab === 'students' && studentSubTab === 'list' && selectedFilterCourse) {
       fetchStudentsForCourse(selectedFilterCourse);
+    }
+    if (activeTab === 'devices') {
+      fetchDevicesData();
     }
   }, [activeTab, studentSubTab, selectedFilterCourse]);
 
@@ -90,6 +99,72 @@ export default function AdminDashboard() {
       console.error(e);
     } finally {
       setLoadingCourses(false);
+    }
+  };
+
+  const fetchDevicesData = async () => {
+    setLoadingDevices(true);
+    try {
+      const res = await fetch('/api/admin/devices');
+      const data = await res.json();
+      if (res.ok) {
+        setDeviceStats(data.stats);
+        setDevicesList(data.students || []);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingDevices(false);
+    }
+  };
+
+  const handleResetSingleDevice = async (student: any) => {
+    if (!confirm(`${student.fullName} (@${student.username}) ගේ උපාංගය Reset කිරීමට අවශ්‍යද?`)) return;
+
+    setActionLoadingId(student.id);
+    try {
+      const res = await fetch('/api/admin/devices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reset_device', userId: student.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      setDevicesList(prev =>
+        prev.map(s => (s.id === student.id ? { ...s, deviceId: null, isLocked: false } : s))
+      );
+      setDeviceStats(prev => ({
+        ...prev,
+        lockedCount: Math.max(0, prev.lockedCount - 1),
+        unlockedCount: prev.unlockedCount + 1,
+      }));
+      alert('උපාංගය සාර්ථකව Unlock කරන ලදී!');
+    } catch (err: any) {
+      alert('දෝෂයකි: ' + err.message);
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleBulkResetAll = async () => {
+    if (!confirm('අවවාදයයි! සියලුම සිසුන්ගේ උපාංග ලොක් එක එකවර Unlock කිරීමට අවශ්‍ය බව සහතිකද?')) return;
+
+    setLoadingDevices(true);
+    try {
+      const res = await fetch('/api/admin/devices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reset_all' }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      alert('සියලුම උපාංග සාර්ථකව Unlock කරන ලදී!');
+      fetchDevicesData();
+    } catch (err: any) {
+      alert('දෝෂයකි: ' + err.message);
+      setLoadingDevices(false);
     }
   };
 
@@ -149,7 +224,6 @@ export default function AdminDashboard() {
     if (!confirm(`"${title}" පන්තිය සම්පූර්ණයෙන්ම ඉවත් කිරීමට අවශ්‍යද? මෙහි ඇති Zoom links, Recordings සහ Enrollments සියල්ල මැකී යනු ඇත.`)) {
       return;
     }
-
     try {
       const res = await fetch('/api/manage-courses', {
         method: 'POST',
@@ -425,6 +499,12 @@ export default function AdminDashboard() {
     s.phone.includes(searchQuery)
   );
 
+  const filteredDevices = devicesList.filter(d =>
+    d.fullName.toLowerCase().includes(searchDeviceQuery.toLowerCase()) ||
+    d.username.toLowerCase().includes(searchDeviceQuery.toLowerCase()) ||
+    d.phone.includes(searchDeviceQuery)
+  );
+
   return (
     <div className="min-h-screen bg-[#070b14] text-white p-6 md:p-10 font-sans">
       {/* Top Header */}
@@ -458,20 +538,20 @@ export default function AdminDashboard() {
             👨‍🎓 Students / සිසුන්
           </button>
           <button
+            onClick={() => setActiveTab('devices')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+              activeTab === 'devices' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            📱 Devices / උපාංග
+          </button>
+          <button
             onClick={() => setActiveTab('slips')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
               activeTab === 'slips' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
             }`}
           >
             Slip Approvals
-          </button>
-          <button
-            onClick={() => setActiveTab('devices')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-              activeTab === 'devices' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Devices
           </button>
         </nav>
       </header>
@@ -480,15 +560,12 @@ export default function AdminDashboard() {
       <main className="mt-8 max-w-7xl mx-auto">
         
         {/* ============================================================== */}
-        {/* TAB: COURSES / පන්ති (CLASS HUB & MANAGEMENT) */}
+        {/* TAB 1: COURSES / පන්ති (CLASS HUB) */}
         {/* ============================================================== */}
         {activeTab === 'courses' && (
           <div className="space-y-6">
-            
-            {/* 1. VIEW SPECIFIC COURSE DETAILS & WORKSPACE */}
             {selectedCourseForManage ? (
               <div className="space-y-6">
-                {/* Back bar */}
                 <div className="flex flex-wrap items-center justify-between gap-4 bg-[#0c1322] border border-slate-800 p-5 rounded-2xl">
                   <div className="flex items-center gap-3">
                     <button
@@ -524,8 +601,7 @@ export default function AdminDashboard() {
                   <div className="p-16 text-center text-slate-400">පන්තියේ දත්ත ලබාගනිමින් පවතී...</div>
                 ) : (
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    
-                    {/* SECTION A: LIVE ZOOM CLASS SCHEDULE */}
+                    {/* Live Zoom Class */}
                     <div className="bg-[#0c1322] border border-slate-800/80 rounded-2xl p-6 shadow-xl space-y-6">
                       <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                         <div className="flex items-center gap-2">
@@ -549,7 +625,6 @@ export default function AdminDashboard() {
                             <button
                               onClick={() => handleDeleteLiveClass(courseLiveClass.id)}
                               className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition"
-                              title="Schedule එක ඉවත් කරන්න"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -574,11 +649,8 @@ export default function AdminDashboard() {
                         </div>
                       )}
 
-                      {/* Schedule Form */}
                       <form onSubmit={handleSaveLiveClass} className="space-y-4 pt-2">
-                        <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                          {courseLiveClass ? 'අලුත් Zoom පන්තියක් Schedule කිරීම (Update)' : 'නව Zoom පන්තියක් Schedule කරන්න'}
-                        </h4>
+                        <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">නව Zoom පන්තියක් Schedule කරන්න</h4>
                         <div>
                           <label className="block text-xs text-slate-400 mb-1">පාඩමේ මාතෘකාව *</label>
                           <input
@@ -633,17 +705,16 @@ export default function AdminDashboard() {
                       </form>
                     </div>
 
-                    {/* SECTION B: RECORDINGS MANAGEMENT */}
+                    {/* Recordings */}
                     <div className="bg-[#0c1322] border border-slate-800/80 rounded-2xl p-6 shadow-xl space-y-6">
                       <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                         <div className="flex items-center gap-2">
                           <Film className="w-5 h-5 text-blue-400" />
                           <h3 className="font-bold text-base">Class Recordings ({courseRecordings.length})</h3>
                         </div>
-                        <span className="text-[10px] text-slate-400">Bunny Stream DRM Protection</span>
+                        <span className="text-[10px] text-slate-400">DRM Secured</span>
                       </div>
 
-                      {/* Add Recording Form */}
                       <form onSubmit={handleAddRecording} className="space-y-4 bg-[#131c31] p-4 rounded-xl border border-slate-800">
                         <h4 className="text-xs font-bold text-slate-200">➕ අලුත් Recording එකක් එකතු කරන්න</h4>
                         <div>
@@ -699,25 +770,23 @@ export default function AdminDashboard() {
                         </button>
                       </form>
 
-                      {/* Recordings List */}
                       <div className="space-y-2 max-h-[340px] overflow-y-auto pr-1">
                         {courseRecordings.length === 0 ? (
                           <div className="p-6 text-center text-xs text-slate-500">මෙම පන්තියට තවම Recordings නොමැත.</div>
                         ) : (
                           courseRecordings.map((rec) => (
-                            <div key={rec.id} className="p-3.5 rounded-xl bg-[#131c31] border border-slate-800 flex items-center justify-between hover:border-slate-700 transition">
+                            <div key={rec.id} className="p-3.5 rounded-xl bg-[#131c31] border border-slate-800 flex items-center justify-between">
                               <div className="space-y-1 pr-3">
                                 <h5 className="text-xs font-semibold text-white line-clamp-1">{rec.title}</h5>
                                 <div className="flex items-center gap-3 text-[10px] text-slate-400">
                                   <span>📅 {rec.lesson_date}</span>
                                   <span>⏱️ {rec.duration || '2h 30m'}</span>
-                                  <span className="font-mono text-blue-400">ID: {rec.video_id?.substring(0, 10)}...</span>
+                                  <span className="font-mono text-blue-400">ID: {rec.video_id?.substring(0, 8)}...</span>
                                 </div>
                               </div>
                               <button
                                 onClick={() => handleDeleteRecording(rec.id)}
                                 className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition"
-                                title="Recording එක මකන්න"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -725,16 +794,13 @@ export default function AdminDashboard() {
                           ))
                         )}
                       </div>
-
                     </div>
                   </div>
                 )}
               </div>
             ) : (
-              /* 2. OVERVIEW OF ALL COURSES (DEFAULT VIEW) */
+              /* Overview of All Courses */
               <div className="space-y-6">
-                
-                {/* Actions & Stats Bar */}
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-[#0c1322] border border-slate-800 p-5 rounded-2xl shadow-xl">
                   <div>
                     <h2 className="text-lg font-bold text-white flex items-center gap-2">
@@ -752,7 +818,6 @@ export default function AdminDashboard() {
                   </button>
                 </div>
 
-                {/* Courses Grid */}
                 {loadingCourses ? (
                   <div className="p-16 text-center text-slate-400 text-sm">පන්ති ලැයිස්තුව ලබාගනිමින් පවතී...</div>
                 ) : courses.length === 0 ? (
@@ -760,7 +825,7 @@ export default function AdminDashboard() {
                     <BookOpen className="w-12 h-12 text-slate-600 mx-auto" />
                     <h3 className="text-base font-bold text-white">තවමත් පන්ති කිසිවක් සකස් කර නොමැත</h3>
                     <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                      ඉහත ඇති "+ අලුත් පන්තියක් සාදන්න" බොත්තම ඔබා ඔබේ පළමු පන්තිය පහසුවෙන් එක් කරන්න.
+                      ඉහත ඇති "+ අලුත් පන්තියක් සාදන්න" බොත්තම ඔබා ඔබේ පළමු පන්තිය එක් කරන්න.
                     </p>
                   </div>
                 ) : (
@@ -796,7 +861,6 @@ export default function AdminDashboard() {
                           </div>
                         </div>
 
-                        {/* Actions */}
                         <div className="flex items-center gap-2 pt-2">
                           <button
                             onClick={() => handleSelectCourseToManage(c)}
@@ -807,7 +871,6 @@ export default function AdminDashboard() {
                           <button
                             onClick={() => handleDeleteCourse(c.id, c.title)}
                             className="p-2.5 rounded-xl bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-slate-700/50 transition cursor-pointer"
-                            title="පන්තිය ඉවත් කරන්න"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -816,15 +879,13 @@ export default function AdminDashboard() {
                     ))}
                   </div>
                 )}
-
               </div>
             )}
-
           </div>
         )}
 
         {/* ============================================================== */}
-        {/* TAB: STUDENTS (STUDENTS DIRECTORY & REGISTRATION) */}
+        {/* TAB 2: STUDENTS (REGISTRATION & DIRECTORY) */}
         {/* ============================================================== */}
         {activeTab === 'students' && (
           <div className="space-y-6">
@@ -832,9 +893,7 @@ export default function AdminDashboard() {
               <button
                 onClick={() => setStudentSubTab('register')}
                 className={`pb-3 text-sm font-semibold transition border-b-2 ${
-                  studentSubTab === 'register'
-                    ? 'border-purple-500 text-purple-400'
-                    : 'border-transparent text-slate-400 hover:text-slate-200'
+                  studentSubTab === 'register' ? 'border-purple-500 text-purple-400' : 'border-transparent text-slate-400 hover:text-slate-200'
                 }`}
               >
                 ➕ නව ශිෂ්‍ය ලියාපදිංචිය (Registration)
@@ -842,9 +901,7 @@ export default function AdminDashboard() {
               <button
                 onClick={() => setStudentSubTab('list')}
                 className={`pb-3 text-sm font-semibold transition border-b-2 ${
-                  studentSubTab === 'list'
-                    ? 'border-purple-500 text-purple-400'
-                    : 'border-transparent text-slate-400 hover:text-slate-200'
+                  studentSubTab === 'list' ? 'border-purple-500 text-purple-400' : 'border-transparent text-slate-400 hover:text-slate-200'
                 }`}
               >
                 📋 පන්ති අනුව සිසුන් ලැයිස්තුව (Class-wise Students)
@@ -1031,9 +1088,7 @@ export default function AdminDashboard() {
                   {loadingStudents ? (
                     <div className="p-12 text-center text-slate-400 text-sm">සිසුන්ගේ තොරතුරු ලබාගනිමින් පවතී...</div>
                   ) : filteredStudents.length === 0 ? (
-                    <div className="p-12 text-center text-slate-500 text-sm">
-                      මෙම පන්තියට තවමත් සිසුන් ලියාපදිංචි වී නොමැත.
-                    </div>
+                    <div className="p-12 text-center text-slate-500 text-sm">මෙම පන්තියට තවමත් සිසුන් ලියාපදිංචි වී නොමැත.</div>
                   ) : (
                     <div className="overflow-x-auto">
                       <table className="w-full text-left text-xs text-slate-300">
@@ -1060,12 +1115,8 @@ export default function AdminDashboard() {
 
                             return (
                               <tr key={st.userId} className="hover:bg-slate-800/30 transition">
-                                <td className="py-3.5 px-4 font-semibold text-white">
-                                  {st.fullName}
-                                </td>
-                                <td className="py-3.5 px-4 font-mono text-purple-400">
-                                  @{st.username}
-                                </td>
+                                <td className="py-3.5 px-4 font-semibold text-white">{st.fullName}</td>
+                                <td className="py-3.5 px-4 font-mono text-purple-400">@{st.username}</td>
                                 <td className="py-3.5 px-4">
                                   {st.phone ? (
                                     <a
@@ -1131,6 +1182,151 @@ export default function AdminDashboard() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ============================================================== */}
+        {/* TAB 3: DEVICES (DEVICE SECURITY & QUICK UNLOCK HUB) */}
+        {/* ============================================================== */}
+        {activeTab === 'devices' && (
+          <div className="space-y-6">
+            
+            {/* Top Stat Summary Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+              <div className="bg-[#0c1322] border border-slate-800 p-5 rounded-2xl flex items-center justify-between shadow-xl">
+                <div>
+                  <div className="text-xs text-slate-400">මුළු ලියාපදිංචි සිසුන්</div>
+                  <div className="text-2xl font-bold font-mono text-white mt-1">{deviceStats.totalStudents}</div>
+                </div>
+                <div className="w-11 h-11 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center">
+                  <Users className="w-5 h-5" />
+                </div>
+              </div>
+
+              <div className="bg-[#0c1322] border border-slate-800 p-5 rounded-2xl flex items-center justify-between shadow-xl">
+                <div>
+                  <div className="text-xs text-slate-400">උපාංග ලොක් වූ සිසුන් (Active)</div>
+                  <div className="text-2xl font-bold font-mono text-amber-400 mt-1">{deviceStats.lockedCount}</div>
+                </div>
+                <div className="w-11 h-11 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center">
+                  <Lock className="w-5 h-5" />
+                </div>
+              </div>
+
+              <div className="bg-[#0c1322] border border-slate-800 p-5 rounded-2xl flex items-center justify-between shadow-xl">
+                <div>
+                  <div className="text-xs text-slate-400">Unlocked / අලුත් උපාංග බලාපොරොත්තු</div>
+                  <div className="text-2xl font-bold font-mono text-emerald-400 mt-1">{deviceStats.unlockedCount}</div>
+                </div>
+                <div className="w-11 h-11 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                  <Unlock className="w-5 h-5" />
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Search & Bulk Actions Bar */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-[#0c1322] border border-slate-800 p-5 rounded-2xl shadow-xl">
+              <div className="flex-1 w-full sm:max-w-md relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                <input
+                  type="text"
+                  placeholder="ශිෂ්‍යයාගේ නම, Username (@) හෝ Phone ගසා සොයන්න..."
+                  value={searchDeviceQuery}
+                  onChange={(e) => setSearchDeviceQuery(e.target.value)}
+                  className="w-full bg-[#131c31] border border-slate-700 rounded-xl pl-10 pr-4 py-2.5 text-xs text-white focus:outline-none focus:border-purple-500"
+                />
+              </div>
+
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                <button
+                  onClick={fetchDevicesData}
+                  className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer"
+                  title="Refresh"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={handleBulkResetAll}
+                  className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-red-600/10 border border-red-500/30 hover:bg-red-600 hover:text-white text-red-400 text-xs font-semibold transition cursor-pointer"
+                >
+                  🔓 සියලුම උපාංග Reset කරන්න (Bulk Unlock)
+                </button>
+              </div>
+            </div>
+
+            {/* Devices Table */}
+            <div className="bg-[#0c1322] border border-slate-800/80 rounded-2xl overflow-hidden shadow-xl">
+              {loadingDevices ? (
+                <div className="p-16 text-center text-slate-400 text-sm">උපාංග දත්ත ලබාගනිමින් පවතී...</div>
+              ) : filteredDevices.length === 0 ? (
+                <div className="p-16 text-center text-slate-500 text-sm">සිසුන් හමු නොවීය.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs text-slate-300">
+                    <thead className="bg-[#131c31] text-slate-400 border-b border-slate-800 uppercase tracking-wider text-[10px]">
+                      <tr>
+                        <th className="py-3.5 px-4">ශිෂ්‍යයා (Student)</th>
+                        <th className="py-3.5 px-4">Username</th>
+                        <th className="py-3.5 px-4">දුරකථන අංකය</th>
+                        <th className="py-3.5 px-4">Device Status</th>
+                        <th className="py-3.5 px-4">Device Identifier</th>
+                        <th className="py-3.5 px-4 text-center">ක්‍රියාමාර්ගය (Action)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60">
+                      {filteredDevices.map((st) => (
+                        <tr key={st.id} className="hover:bg-slate-800/30 transition">
+                          <td className="py-3.5 px-4 font-semibold text-white">{st.fullName}</td>
+                          <td className="py-3.5 px-4 font-mono text-purple-400">@{st.username}</td>
+                          <td className="py-3.5 px-4">
+                            {st.phone ? (
+                              <a
+                                href={`https://wa.me/94${st.phone.replace(/^0/, '')}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-emerald-400 hover:underline flex items-center gap-1"
+                              >
+                                <PhoneCall className="w-3 h-3" /> {st.phone}
+                              </a>
+                            ) : (
+                              <span className="text-slate-600">-</span>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-4">
+                            {st.isLocked ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-300 font-mono text-[10px]">
+                                🔒 Locked
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px]">
+                                🔓 Unlocked
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-4 font-mono text-[10px] text-slate-500">
+                            {st.deviceId ? `${st.deviceId.substring(0, 16)}...` : 'කිසිදු උපාංගයක් ලොක් වී නැත'}
+                          </td>
+                          <td className="py-3.5 px-4 text-center">
+                            {st.isLocked ? (
+                              <button
+                                disabled={actionLoadingId === st.id}
+                                onClick={() => handleResetSingleDevice(st)}
+                                className="px-3 py-1.5 rounded-lg bg-red-600/20 hover:bg-red-600 text-red-300 hover:text-white border border-red-500/30 font-semibold text-[11px] transition cursor-pointer shadow-md disabled:opacity-50"
+                              >
+                                {actionLoadingId === st.id ? 'Reset වෙමින්...' : '🔓 Reset Device'}
+                              </button>
+                            ) : (
+                              <span className="text-[11px] text-slate-600">Ready to Login</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
           </div>
         )}
 
