@@ -17,6 +17,7 @@ export async function GET(req: Request) {
     const courseId = searchParams.get('courseId');
 
     if (courseId) {
+      // 1. Fetch single course details with its live class and recordings
       const { data: course, error: cErr } = await supabaseAdmin
         .from('courses')
         .select('*')
@@ -53,6 +54,7 @@ export async function GET(req: Request) {
       });
     }
 
+    // 2. Fetch all courses with student & recording counts
     const { data: courses, error } = await supabaseAdmin
       .from('courses')
       .select('*')
@@ -133,7 +135,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, message: 'පාඨමාලාව සාර්ථකව ඉවත් කරන ලදී.' });
     }
 
-    // ACTION 3: AUTO SCHEDULE ZOOM MEETING (NO MANUAL URL NEEDED)
+    // ACTION 3: AUTO SCHEDULE ZOOM MEETING (WITH MEETING ID FOR WEBHOOK AUTO-RECORDING)
     if (action === 'schedule_live_class') {
       const { courseId, title, date, time } = body;
       if (!courseId || !title) {
@@ -142,13 +144,13 @@ export async function POST(req: Request) {
 
       const startDateTime = `${date || new Date().toISOString().split('T')[0]}T${time || '19:00'}:00`;
       
-      // Auto-create Zoom meeting via Zoom API (or mock mode)
+      // Auto-create Zoom meeting via API / Simulation
       const zoomMeeting = await createAutoZoomMeeting(title, startDateTime);
 
       // Student will use this secure proxy route to join
       const secureJoinUrl = `/api/zoom/join?courseId=${courseId}&meetingId=${zoomMeeting.meetingId}`;
 
-      // Clean old live class
+      // Clean previous live class for this course
       await supabaseAdmin.from('live_classes').delete().eq('course_id', courseId);
 
       const { data, error } = await supabaseAdmin
@@ -160,6 +162,7 @@ export async function POST(req: Request) {
             date: date || new Date().toISOString().split('T')[0],
             time: time || '19:00',
             zoom_join_url: secureJoinUrl,
+            meeting_id: zoomMeeting.meetingId, // Webhook එකෙන් Auto Recording එක හඳුනාගැනීමට meeting_id සුරකියි
           },
         ])
         .select()
