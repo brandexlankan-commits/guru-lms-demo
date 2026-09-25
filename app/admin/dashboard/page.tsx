@@ -6,7 +6,7 @@ import {
   BookOpen, Video, Users, Plus, Trash2, ArrowLeft, 
   Calendar, Clock, Link as LinkIcon, Film, PlayCircle,
   CheckCircle, AlertCircle, X, Shield, RefreshCw, Smartphone,
-  Search, Unlock, Lock, PhoneCall, CreditCard, Eye, Check, ExternalLink, Sparkles
+  Search, Unlock, Lock, PhoneCall, CreditCard, Eye, Check, ExternalLink, Sparkles, ChevronDown, ChevronUp
 } from 'lucide-react';
 
 export default function AdminDashboard() {
@@ -41,7 +41,8 @@ export default function AdminDashboard() {
   const [schedTime, setSchedTime] = useState('19:00');
   const [savingLiveClass, setSavingLiveClass] = useState(false);
 
-  // Recordings form states
+  // Recordings form states & toggle
+  const [showManualRecForm, setShowManualRecForm] = useState(false);
   const [recTitle, setRecTitle] = useState('');
   const [recDate, setRecDate] = useState('');
   const [recDuration, setRecDuration] = useState('2h 30m');
@@ -323,7 +324,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // Auto-creates Zoom Meeting via Backend API (No Manual URL)
   const handleSaveLiveClass = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCourseForManage) return;
@@ -394,6 +394,7 @@ export default function AdminDashboard() {
       setCourseRecordings(prev => [data.recording, ...prev]);
       setRecTitle('');
       setRecVideoId('');
+      setShowManualRecForm(false);
     } catch (err: any) {
       alert('දෝෂයකි: ' + err.message);
     } finally {
@@ -692,9 +693,9 @@ export default function AdminDashboard() {
                 {loadingManageDetails ? (
                   <div className="p-16 text-center text-slate-400">පන්තියේ දත්ත ලබාගනිමින් පවතී...</div>
                 ) : (
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
                     
-                    {/* Live Zoom Class Section */}
+                    {/* Live Zoom Class Section (Left Column) */}
                     <div className="bg-[#0c1322] border border-slate-800/80 rounded-2xl p-6 shadow-xl space-y-6">
                       <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                         <div className="flex items-center gap-2">
@@ -729,7 +730,7 @@ export default function AdminDashboard() {
                           </div>
                           <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-xs">
                             <span className="text-slate-400 flex items-center gap-1 text-[11px]">
-                              🛡️ <strong className="text-emerald-400">Anti-Leak Gateway:</strong> Zoom Link එක Auto ආරක්ෂිතයි
+                              🛡️ <strong className="text-emerald-400">Anti-Leak Gateway:</strong> Link එක ආරක්ෂිතයි
                             </span>
                             <a
                               href={courseLiveClass.zoom_join_url}
@@ -794,7 +795,6 @@ export default function AdminDashboard() {
                           </div>
                         </div>
 
-                        {/* Direct 1-Click Auto Creation Button (No manual join URL input needed!) */}
                         <button
                           type="submit"
                           disabled={savingLiveClass}
@@ -805,80 +805,130 @@ export default function AdminDashboard() {
                       </form>
                     </div>
 
-                    {/* Recordings Management Section */}
-                    <div className="bg-[#0c1322] border border-slate-800/80 rounded-2xl p-6 shadow-xl space-y-6">
+                    {/* Recordings Hub Section (Right Column - Balanced & Clean) */}
+                    <div className="bg-[#0c1322] border border-slate-800/80 rounded-2xl p-6 shadow-xl space-y-5">
                       <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                         <div className="flex items-center gap-2">
                           <Film className="w-5 h-5 text-blue-400" />
                           <h3 className="font-bold text-base">Class Recordings ({courseRecordings.length})</h3>
                         </div>
-                        <span className="text-[10px] text-slate-400">DRM Secured</span>
+                        <span className="px-2.5 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-bold">
+                          DRM Secured
+                        </span>
                       </div>
 
-                      <form onSubmit={handleAddRecording} className="space-y-4 bg-[#131c31] p-4 rounded-xl border border-slate-800">
-                        <h4 className="text-xs font-bold text-slate-200">➕ අලුත් Recording එකක් එකතු කරන්න</h4>
-                        <div>
-                          <label className="block text-xs text-slate-400 mb-1">පාඩමේ නම / මාතෘකාව *</label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="උදා: පාඩම 02: සම්පූර්ණ විවරණය"
-                            value={recTitle}
-                            onChange={(e) => setRecTitle(e.target.value)}
-                            className="w-full bg-[#0c1322] border border-slate-700 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
-                          />
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-xs text-slate-400 mb-1">පැවැත්වූ දිනය</label>
-                            <input
-                              type="date"
-                              required
-                              value={recDate}
-                              onChange={(e) => setRecDate(e.target.value)}
-                              className="w-full bg-[#0c1322] border border-slate-700 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
-                            />
+                      {/* Automated Cloud Sync Active Info Card */}
+                      <div className="p-4 rounded-xl bg-gradient-to-r from-blue-950/40 via-purple-950/30 to-slate-900 border border-blue-500/30 flex items-start justify-between gap-3 shadow-inner">
+                        <div className="flex items-start gap-3">
+                          <div className="w-9 h-9 rounded-xl bg-blue-500/20 border border-blue-500/30 text-blue-400 flex items-center justify-center shrink-0 mt-0.5">
+                            <Sparkles className="w-4 h-4" />
                           </div>
                           <div>
-                            <label className="block text-xs text-slate-400 mb-1">කාලය (Duration)</label>
-                            <input
-                              type="text"
-                              placeholder="2h 15m"
-                              value={recDuration}
-                              onChange={(e) => setRecDuration(e.target.value)}
-                              className="w-full bg-[#0c1322] border border-slate-700 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
-                            />
+                            <div className="flex items-center gap-2">
+                              <h4 className="text-xs font-bold text-white">ස්වයංක්‍රීය Cloud Recording Sync</h4>
+                              <span className="px-2 py-0.2 rounded-full bg-emerald-500/20 text-emerald-400 text-[9px] font-bold">
+                                ACTIVE
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
+                              Zoom පන්තිය අවසන් වූ සැනින් Recording එක Bunny Stream හරහා ස්වයංක්‍රීයව මෙහි සහ සිසුන්ගේ Dashboard එකේ සක්‍රිය වේ.
+                            </p>
                           </div>
-                        </div>
-                        <div>
-                          <label className="block text-xs text-slate-400 mb-1">Bunny Video ID (හෝ Embed Video ID) *</label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="උදා: d27c8192-3a81-4321-9988-xxxx"
-                            value={recVideoId}
-                            onChange={(e) => setRecVideoId(e.target.value)}
-                            className="w-full bg-[#0c1322] border border-slate-700 rounded-xl px-4 py-2 text-xs text-blue-300 font-mono focus:outline-none focus:border-blue-500"
-                          />
                         </div>
                         <button
-                          type="submit"
-                          disabled={savingRecording}
-                          className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-2.5 rounded-xl text-xs transition shadow-lg shadow-blue-600/20 disabled:opacity-50 cursor-pointer"
+                          type="button"
+                          onClick={() => setShowManualRecForm(!showManualRecForm)}
+                          className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[11px] font-semibold transition shrink-0 border border-slate-700 cursor-pointer flex items-center gap-1"
                         >
-                          {savingRecording ? 'එක්වෙමින් පවතී...' : '+ Recording එක Playlist එකට දමන්න'}
+                          <span>{showManualRecForm ? 'Hide Form' : '+ Manual Add'}</span>
+                          {showManualRecForm ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                         </button>
-                      </form>
+                      </div>
 
-                      <div className="space-y-2 max-h-[340px] overflow-y-auto pr-1">
+                      {/* Optional Collapsible Manual Add Form */}
+                      {showManualRecForm && (
+                        <form onSubmit={handleAddRecording} className="space-y-3 bg-[#131c31] p-4 rounded-xl border border-blue-500/30 animate-in fade-in duration-200">
+                          <div className="flex items-center justify-between pb-1 border-b border-slate-800">
+                            <h4 className="text-xs font-bold text-blue-300">➕ අතින් Recording එකක් එකතු කිරීම (Fallback)</h4>
+                            <span className="text-[10px] text-slate-500">අවශ්‍ය නම් පමණක්</span>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] text-slate-400 mb-1">පාඩමේ නම / මාතෘකාව *</label>
+                            <input
+                              type="text"
+                              required
+                              placeholder="උදා: පාඩම 02: සම්පූර්ණ විවරණය"
+                              value={recTitle}
+                              onChange={(e) => setRecTitle(e.target.value)}
+                              className="w-full bg-[#0c1322] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-[11px] text-slate-400 mb-1">පැවැත්වූ දිනය</label>
+                              <input
+                                type="date"
+                                required
+                                value={recDate}
+                                onChange={(e) => setRecDate(e.target.value)}
+                                className="w-full bg-[#0c1322] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[11px] text-slate-400 mb-1">කාලය (Duration)</label>
+                              <input
+                                type="text"
+                                placeholder="2h 15m"
+                                value={recDuration}
+                                onChange={(e) => setRecDuration(e.target.value)}
+                                className="w-full bg-[#0c1322] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] text-slate-400 mb-1">Bunny Video ID (හෝ Embed Video ID) *</label>
+                            <input
+                              type="text"
+                              required
+                              placeholder="උදා: d27c8192-3a81-4321-9988-xxxx"
+                              value={recVideoId}
+                              onChange={(e) => setRecVideoId(e.target.value)}
+                              className="w-full bg-[#0c1322] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-blue-300 font-mono focus:outline-none focus:border-blue-500"
+                            />
+                          </div>
+
+                          <button
+                            type="submit"
+                            disabled={savingRecording}
+                            className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-2.5 rounded-xl text-xs transition shadow-lg shadow-blue-600/20 disabled:opacity-50 cursor-pointer"
+                          >
+                            {savingRecording ? 'එක්වෙමින් පවතී...' : '+ Recording එක Playlist එකට Save කරන්න'}
+                          </button>
+                        </form>
+                      )}
+
+                      {/* Recordings List */}
+                      <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
                         {courseRecordings.length === 0 ? (
-                          <div className="p-6 text-center text-xs text-slate-500">මෙම පන්තියට තවම Recordings නොමැත.</div>
+                          <div className="p-10 rounded-xl bg-slate-900/30 border border-dashed border-slate-800 text-center space-y-2">
+                            <Film className="w-8 h-8 text-slate-600 mx-auto" />
+                            <div className="text-xs font-semibold text-slate-400">මෙම පන්තියට තවම Recordings නොමැත.</div>
+                            <p className="text-[11px] text-slate-500 max-w-xs mx-auto">
+                              පන්තිය පවත්වා අවසන් වූ පසු Zoom Recording එක ස්වයංක්‍රීයව මෙහි දිස්වනු ඇත.
+                            </p>
+                          </div>
                         ) : (
                           courseRecordings.map((rec) => (
-                            <div key={rec.id} className="p-3.5 rounded-xl bg-[#131c31] border border-slate-800 flex items-center justify-between">
+                            <div key={rec.id} className="p-3.5 rounded-xl bg-[#131c31] border border-slate-800 hover:border-slate-700 transition flex items-center justify-between group">
                               <div className="space-y-1 pr-3">
-                                <h5 className="text-xs font-semibold text-white line-clamp-1">{rec.title}</h5>
-                                <div className="flex items-center gap-3 text-[10px] text-slate-400">
+                                <div className="flex items-center gap-2">
+                                  <PlayCircle className="w-4 h-4 text-blue-400 shrink-0" />
+                                  <h5 className="text-xs font-semibold text-white line-clamp-1 group-hover:text-blue-300 transition">{rec.title}</h5>
+                                </div>
+                                <div className="flex items-center gap-3 text-[10px] text-slate-400 pl-6">
                                   <span>📅 {rec.lesson_date}</span>
                                   <span>⏱️ {rec.duration || '2h 30m'}</span>
                                   <span className="font-mono text-blue-400">ID: {rec.video_id?.substring(0, 8)}...</span>
@@ -886,7 +936,8 @@ export default function AdminDashboard() {
                               </div>
                               <button
                                 onClick={() => handleDeleteRecording(rec.id)}
-                                className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition cursor-pointer"
+                                className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition cursor-pointer shrink-0"
+                                title="Recording එක මකන්න"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -894,7 +945,14 @@ export default function AdminDashboard() {
                           ))
                         )}
                       </div>
+
+                      {/* Footer Info */}
+                      <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500">
+                        <span>🛡️ Floating Dynamic Watermark Enabled</span>
+                        <span>{courseRecordings.length} Recordings Total</span>
+                      </div>
                     </div>
+
                   </div>
                 )}
               </div>
