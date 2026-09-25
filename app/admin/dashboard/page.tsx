@@ -6,11 +6,11 @@ import {
   BookOpen, Video, Users, Plus, Trash2, ArrowLeft, 
   Calendar, Clock, Link as LinkIcon, Film, PlayCircle,
   CheckCircle, AlertCircle, X, Shield, RefreshCw, Smartphone,
-  Search, Unlock, Lock, PhoneCall
+  Search, Unlock, Lock, PhoneCall, CreditCard, Eye, Check, ExternalLink
 } from 'lucide-react';
 
 export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState<'courses' | 'students' | 'slips' | 'devices'>('courses');
+  const [activeTab, setActiveTab] = useState<'courses' | 'students' | 'devices' | 'slips'>('courses');
 
   // Sub-tabs inside Students Tab
   const [studentSubTab, setStudentSubTab] = useState<'register' | 'list'>('register');
@@ -70,6 +70,15 @@ export default function AdminDashboard() {
   const [loadingDevices, setLoadingDevices] = useState(false);
   const [searchDeviceQuery, setSearchDeviceQuery] = useState('');
 
+  // Slip Approvals State
+  const [slipStats, setSlipStats] = useState({ total: 0, pending: 0, approved: 0, rejected: 0 });
+  const [slipsList, setSlipsList] = useState<any[]>([]);
+  const [loadingSlips, setLoadingSlips] = useState(false);
+  const [slipFilter, setSlipFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
+  const [searchSlipQuery, setSearchSlipQuery] = useState('');
+  const [previewSlip, setPreviewSlip] = useState<any | null>(null);
+  const [processingSlipId, setProcessingSlipId] = useState<string | null>(null);
+
   useEffect(() => {
     fetchCourses();
     generateRandomPassword();
@@ -81,6 +90,9 @@ export default function AdminDashboard() {
     }
     if (activeTab === 'devices') {
       fetchDevicesData();
+    }
+    if (activeTab === 'slips') {
+      fetchSlipsData();
     }
   }, [activeTab, studentSubTab, selectedFilterCourse]);
 
@@ -115,6 +127,74 @@ export default function AdminDashboard() {
       console.error(e);
     } finally {
       setLoadingDevices(false);
+    }
+  };
+
+  const fetchSlipsData = async () => {
+    setLoadingSlips(true);
+    try {
+      const res = await fetch('/api/admin/slips');
+      const data = await res.json();
+      if (res.ok) {
+        setSlipStats(data.stats);
+        setSlipsList(data.slips || []);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingSlips(false);
+    }
+  };
+
+  const handleApproveSlip = async (slip: any) => {
+    setProcessingSlipId(slip.id);
+    try {
+      const res = await fetch('/api/admin/slips', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'approve',
+          slipId: slip.id,
+          studentId: slip.student_id,
+          courseId: slip.course_id,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      alert('රිසිට්පත සාර්ථකව අනුමත කරන ලදී! ශිෂ්‍යයාට දින 30ක පන්ති ප්‍රවේශය සක්‍රිය විය.');
+      if (previewSlip?.id === slip.id) setPreviewSlip(null);
+      fetchSlipsData();
+    } catch (err: any) {
+      alert('දෝෂයකි: ' + err.message);
+    } finally {
+      setProcessingSlipId(null);
+    }
+  };
+
+  const handleRejectSlip = async (slip: any) => {
+    if (!confirm(`${slip.studentName} ගේ මෙම රිසිට්පත ප්‍රතික්ෂේප (Reject) කිරීමට අවශ්‍ය බව සහතිකද?`)) return;
+
+    setProcessingSlipId(slip.id);
+    try {
+      const res = await fetch('/api/admin/slips', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'reject',
+          slipId: slip.id,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      alert('රිසිට්පත ප්‍රතික්ෂේප කරන ලදී.');
+      if (previewSlip?.id === slip.id) setPreviewSlip(null);
+      fetchSlipsData();
+    } catch (err: any) {
+      alert('දෝෂයකි: ' + err.message);
+    } finally {
+      setProcessingSlipId(null);
     }
   };
 
@@ -452,9 +532,7 @@ export default function AdminDashboard() {
   };
 
   const handleResetDevice = async (student: any) => {
-    if (!confirm(`${student.fullName} ගේ උපාංගය Reset කිරීමට අවශ්‍යද? එමඟින් ඔහුට නව Phone හෝ Laptop එකකින් Login විය හැක.`)) {
-      return;
-    }
+    if (!confirm(`${student.fullName} ගේ උපාංගය Reset කිරීමට අවශ්‍යද?`)) return;
     setActionLoadingId(`reset_${student.userId}`);
     try {
       const res = await fetch('/api/manage-student', {
@@ -505,6 +583,16 @@ export default function AdminDashboard() {
     d.phone.includes(searchDeviceQuery)
   );
 
+  const filteredSlips = slipsList.filter(slip => {
+    const matchesFilter = slipFilter === 'all' || slip.status === slipFilter;
+    const matchesSearch =
+      slip.studentName.toLowerCase().includes(searchSlipQuery.toLowerCase()) ||
+      slip.studentUsername.toLowerCase().includes(searchSlipQuery.toLowerCase()) ||
+      slip.course_name?.toLowerCase().includes(searchSlipQuery.toLowerCase()) ||
+      slip.studentPhone?.includes(searchSlipQuery);
+    return matchesFilter && matchesSearch;
+  });
+
   return (
     <div className="min-h-screen bg-[#070b14] text-white p-6 md:p-10 font-sans">
       {/* Top Header */}
@@ -547,11 +635,16 @@ export default function AdminDashboard() {
           </button>
           <button
             onClick={() => setActiveTab('slips')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition relative ${
               activeTab === 'slips' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
             }`}
           >
-            Slip Approvals
+            🧾 Slip Approvals
+            {slipStats.pending > 0 && (
+              <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-amber-500 text-slate-950 font-bold text-[10px]">
+                {slipStats.pending}
+              </span>
+            )}
           </button>
         </nav>
       </header>
@@ -560,7 +653,7 @@ export default function AdminDashboard() {
       <main className="mt-8 max-w-7xl mx-auto">
         
         {/* ============================================================== */}
-        {/* TAB 1: COURSES / පන්ති (CLASS HUB) */}
+        {/* TAB 1: COURSES / පන්ති */}
         {/* ============================================================== */}
         {activeTab === 'courses' && (
           <div className="space-y-6">
@@ -885,7 +978,7 @@ export default function AdminDashboard() {
         )}
 
         {/* ============================================================== */}
-        {/* TAB 2: STUDENTS (REGISTRATION & DIRECTORY) */}
+        {/* TAB 2: STUDENTS */}
         {/* ============================================================== */}
         {activeTab === 'students' && (
           <div className="space-y-6">
@@ -1186,12 +1279,10 @@ export default function AdminDashboard() {
         )}
 
         {/* ============================================================== */}
-        {/* TAB 3: DEVICES (DEVICE SECURITY & QUICK UNLOCK HUB) */}
+        {/* TAB 3: DEVICES */}
         {/* ============================================================== */}
         {activeTab === 'devices' && (
           <div className="space-y-6">
-            
-            {/* Top Stat Summary Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
               <div className="bg-[#0c1322] border border-slate-800 p-5 rounded-2xl flex items-center justify-between shadow-xl">
                 <div>
@@ -1224,7 +1315,6 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            {/* Quick Search & Bulk Actions Bar */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-[#0c1322] border border-slate-800 p-5 rounded-2xl shadow-xl">
               <div className="flex-1 w-full sm:max-w-md relative">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
@@ -1254,7 +1344,6 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            {/* Devices Table */}
             <div className="bg-[#0c1322] border border-slate-800/80 rounded-2xl overflow-hidden shadow-xl">
               {loadingDevices ? (
                 <div className="p-16 text-center text-slate-400 text-sm">උපාංග දත්ත ලබාගනිමින් පවතී...</div>
@@ -1326,11 +1415,319 @@ export default function AdminDashboard() {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* ============================================================== */}
+        {/* TAB 4: SLIP APPROVALS (VERIFY AND ACTIVATE ENROLLMENT) */}
+        {/* ============================================================== */}
+        {activeTab === 'slips' && (
+          <div className="space-y-6">
+            
+            {/* Top Stat Summary Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+              <div className="bg-[#0c1322] border border-slate-800 p-5 rounded-2xl flex items-center justify-between shadow-xl">
+                <div>
+                  <div className="text-xs text-slate-400">මුළු රිසිට්පත්</div>
+                  <div className="text-2xl font-bold font-mono text-white mt-1">{slipStats.total}</div>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center">
+                  <CreditCard className="w-5 h-5" />
+                </div>
+              </div>
+
+              <div className="bg-[#0c1322] border border-amber-500/30 p-5 rounded-2xl flex items-center justify-between shadow-xl">
+                <div>
+                  <div className="text-xs text-amber-400 font-semibold">පොරොත්තුවේ ඇති (Pending)</div>
+                  <div className="text-2xl font-bold font-mono text-amber-300 mt-1">{slipStats.pending}</div>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center">
+                  <Clock className="w-5 h-5" />
+                </div>
+              </div>
+
+              <div className="bg-[#0c1322] border border-emerald-500/20 p-5 rounded-2xl flex items-center justify-between shadow-xl">
+                <div>
+                  <div className="text-xs text-slate-400">අනුමත කළ (Approved)</div>
+                  <div className="text-2xl font-bold font-mono text-emerald-400 mt-1">{slipStats.approved}</div>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
+                  <CheckCircle className="w-5 h-5" />
+                </div>
+              </div>
+
+              <div className="bg-[#0c1322] border border-slate-800 p-5 rounded-2xl flex items-center justify-between shadow-xl">
+                <div>
+                  <div className="text-xs text-slate-400">ප්‍රතික්ෂේප කළ (Rejected)</div>
+                  <div className="text-2xl font-bold font-mono text-red-400 mt-1">{slipStats.rejected}</div>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-red-500/10 text-red-400 flex items-center justify-center">
+                  <X className="w-5 h-5" />
+                </div>
+              </div>
+            </div>
+
+            {/* Filter Tabs & Search Bar */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-[#0c1322] border border-slate-800 p-4 rounded-2xl shadow-xl">
+              
+              <div className="flex items-center gap-2 bg-[#131c31] p-1.5 rounded-xl border border-slate-800 w-full sm:w-auto">
+                <button
+                  onClick={() => setSlipFilter('pending')}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                    slipFilter === 'pending' ? 'bg-amber-500 text-slate-950 font-bold shadow' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <span>⏳ පොරොත්තුවේ ඇති</span>
+                  {slipStats.pending > 0 && (
+                    <span className="px-1.5 py-0.2 rounded-full bg-slate-900 text-amber-300 text-[10px] font-bold">
+                      {slipStats.pending}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={() => setSlipFilter('all')}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                    slipFilter === 'all' ? 'bg-purple-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  සියල්ල ({slipStats.total})
+                </button>
+                <button
+                  onClick={() => setSlipFilter('approved')}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                    slipFilter === 'approved' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  අනුමත ({slipStats.approved})
+                </button>
+                <button
+                  onClick={() => setSlipFilter('rejected')}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                    slipFilter === 'rejected' ? 'bg-red-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  ප්‍රතික්ෂේප ({slipStats.rejected})
+                </button>
+              </div>
+
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                <div className="relative flex-1 sm:w-64">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
+                  <input
+                    type="text"
+                    placeholder="ශිෂ්‍යයා හෝ පන්තිය සොයන්න..."
+                    value={searchSlipQuery}
+                    onChange={(e) => setSearchSlipQuery(e.target.value)}
+                    className="w-full bg-[#131c31] border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+                <button
+                  onClick={fetchSlipsData}
+                  className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer"
+                  title="Refresh"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Slips Grid / List */}
+            {loadingSlips ? (
+              <div className="p-16 text-center text-slate-400 text-sm">බැංකු රිසිට්පත් ලබාගනිමින් පවතී...</div>
+            ) : filteredSlips.length === 0 ? (
+              <div className="p-16 bg-[#0c1322] border border-slate-800 rounded-2xl text-center space-y-3">
+                <CreditCard className="w-12 h-12 text-slate-600 mx-auto" />
+                <h3 className="text-base font-bold text-white">මෙම වර්ගයේ රිසිට්පත් කිසිවක් නැත</h3>
+                <p className="text-xs text-slate-400">සිසුන් ගෙවීම් රිසිට්පත් යොමු කළ සැනින් මෙහි දිස්වනු ඇත.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredSlips.map((slip) => {
+                  const formattedDate = new Date(slip.created_at).toLocaleDateString('si-LK', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  });
+
+                  return (
+                    <div
+                      key={slip.id}
+                      className="bg-[#0c1322] border border-slate-800/90 rounded-2xl p-5 shadow-xl flex flex-col justify-between space-y-4 hover:border-slate-700 transition"
+                    >
+                      <div className="space-y-3">
+                        {/* Header: Status and Date */}
+                        <div className="flex items-center justify-between">
+                          <span
+                            className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${
+                              slip.status === 'pending'
+                                ? 'bg-amber-500/10 border border-amber-500/30 text-amber-300'
+                                : slip.status === 'approved'
+                                ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400'
+                                : 'bg-red-500/10 border border-red-500/30 text-red-400'
+                            }`}
+                          >
+                            {slip.status === 'pending' ? '⏳ Review Pending' : slip.status === 'approved' ? '✅ Approved' : '❌ Rejected'}
+                          </span>
+                          <span className="text-[10px] text-slate-500">{formattedDate}</span>
+                        </div>
+
+                        {/* Student Details */}
+                        <div>
+                          <h4 className="text-sm font-bold text-white">{slip.studentName}</h4>
+                          <div className="flex items-center gap-3 text-xs text-slate-400 mt-0.5">
+                            <span className="font-mono text-purple-400">@{slip.studentUsername}</span>
+                            {slip.studentPhone && (
+                              <a
+                                href={`https://wa.me/94${slip.studentPhone.replace(/^0/, '')}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-emerald-400 hover:underline flex items-center gap-1 text-[11px]"
+                              >
+                                💬 {slip.studentPhone}
+                              </a>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Course & Amount */}
+                        <div className="p-3 rounded-xl bg-[#131c31] border border-slate-800 space-y-1 text-xs">
+                          <div className="text-slate-400 text-[10px]">අදාළ පන්තිය:</div>
+                          <div className="font-semibold text-slate-200 line-clamp-1">{slip.course_name || 'පන්තිය'}</div>
+                          <div className="flex items-center justify-between pt-1 border-t border-slate-800/80">
+                            <span className="text-[10px] text-slate-400">ගෙවූ මුදල:</span>
+                            <span className="font-mono font-bold text-emerald-400">Rs. {slip.amount || '0'}/-</span>
+                          </div>
+                        </div>
+
+                        {/* Slip Image Thumbnail */}
+                        <div
+                          onClick={() => setPreviewSlip(slip)}
+                          className="relative aspect-video rounded-xl bg-slate-900 border border-slate-800 overflow-hidden cursor-pointer group flex items-center justify-center"
+                        >
+                          <img
+                            src={slip.slip_url}
+                            alt="Bank Slip"
+                            className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                          />
+                          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-1.5 text-xs text-white font-semibold">
+                            <Eye className="w-4 h-4" />
+                            <span>රිසිට්පත බලන්න</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="pt-2 border-t border-slate-800/80">
+                        {slip.status === 'pending' ? (
+                          <div className="flex items-center gap-2">
+                            <button
+                              disabled={processingSlipId === slip.id}
+                              onClick={() => handleApproveSlip(slip)}
+                              className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-lg shadow-emerald-600/20"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              <span>{processingSlipId === slip.id ? 'Approve වෙමින්...' : 'Approve (+30 Days)'}</span>
+                            </button>
+                            <button
+                              disabled={processingSlipId === slip.id}
+                              onClick={() => handleRejectSlip(slip)}
+                              className="p-2.5 bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-slate-700/60 rounded-xl transition cursor-pointer"
+                              title="ප්‍රතික්ෂේප කරන්න"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="text-center py-1 text-[11px] text-slate-500">
+                            {slip.status === 'approved' ? 'මෙම රිසිට්පත අනුමත කර ඇත.' : 'මෙම රිසිට්පත ප්‍රතික්ෂේප කර ඇත.'}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
           </div>
         )}
 
       </main>
+
+      {/* ============================================================== */}
+      {/* MODAL: PREVIEW SLIP FULLSCREEN */}
+      {/* ============================================================== */}
+      {previewSlip && (
+        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-[#0c1322] border border-slate-800 max-w-2xl w-full rounded-3xl p-6 space-y-5 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setPreviewSlip(null)}
+              className="absolute right-5 top-5 p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center justify-between pr-8">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <CreditCard className="w-4 h-4 text-purple-400" />
+                  බැංකු රිසිට්පත් පරීක්ෂාව
+                </h3>
+                <p className="text-xs text-slate-400">
+                  {previewSlip.studentName} (@{previewSlip.studentUsername}) • {previewSlip.course_name}
+                </p>
+              </div>
+              <span className="font-mono font-bold text-emerald-400 text-sm">
+                Rs. {previewSlip.amount}/-
+              </span>
+            </div>
+
+            {/* Slip Image Full */}
+            <div className="rounded-2xl border border-slate-800 overflow-hidden bg-slate-950 flex items-center justify-center max-h-[60vh]">
+              <img
+                src={previewSlip.slip_url}
+                alt="Full Slip Preview"
+                className="w-full h-auto max-h-[60vh] object-contain"
+              />
+            </div>
+
+            {/* Bottom Actions */}
+            <div className="flex items-center justify-between gap-3 pt-2">
+              <a
+                href={previewSlip.slip_url}
+                target="_blank"
+                rel="noreferrer"
+                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>මුල් ගොනුව විවෘත කරන්න</span>
+              </a>
+
+              {previewSlip.status === 'pending' && (
+                <div className="flex items-center gap-2">
+                  <button
+                    disabled={processingSlipId === previewSlip.id}
+                    onClick={() => handleRejectSlip(previewSlip)}
+                    className="px-4 py-2.5 rounded-xl bg-red-600/10 border border-red-500/30 hover:bg-red-600 hover:text-white text-red-400 text-xs font-bold transition"
+                  >
+                    ප්‍රතික්ෂේප කරන්න
+                  </button>
+                  <button
+                    disabled={processingSlipId === previewSlip.id}
+                    onClick={() => handleApproveSlip(previewSlip)}
+                    className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition shadow-lg shadow-emerald-600/20"
+                  >
+                    {processingSlipId === previewSlip.id ? 'Approve වෙමින්...' : '✅ Approve (+30 Days Access)'}
+                  </button>
+                </div>
+              )}
+            </div>
+
+          </div>
+        </div>
+      )}
 
       {/* ============================================================== */}
       {/* MODAL: CREATE NEW COURSE */}
