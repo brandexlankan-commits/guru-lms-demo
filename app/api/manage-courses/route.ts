@@ -17,7 +17,7 @@ export async function GET(req: Request) {
     const courseId = searchParams.get('courseId');
 
     if (courseId) {
-      // 1. Fetch single course details with its live class and recordings
+      // 1. Fetch single course details
       const { data: course, error: cErr } = await supabaseAdmin
         .from('courses')
         .select('*')
@@ -26,6 +26,7 @@ export async function GET(req: Request) {
 
       if (cErr) throw cErr;
 
+      // 2. Fetch Live Class
       const { data: liveClass } = await supabaseAdmin
         .from('live_classes')
         .select('*')
@@ -34,12 +35,28 @@ export async function GET(req: Request) {
         .limit(1)
         .maybeSingle();
 
+      // 3. Fetch Recordings
       const { data: recordings } = await supabaseAdmin
         .from('recordings')
         .select('*')
         .eq('course_id', courseId)
         .order('created_at', { ascending: false });
 
+      // 4. Fetch Tutes / Course Materials
+      const { data: materials } = await supabaseAdmin
+        .from('course_materials')
+        .select('*')
+        .eq('course_id', courseId)
+        .order('created_at', { ascending: false });
+
+      // 5. Fetch Assignments with deadline
+      const { data: assignments } = await supabaseAdmin
+        .from('assignments')
+        .select('*, assignment_submissions(count)')
+        .eq('course_id', courseId)
+        .order('created_at', { ascending: false });
+
+      // 6. Active Student count
       const { count: studentCount } = await supabaseAdmin
         .from('course_enrollments')
         .select('*', { count: 'exact', head: true })
@@ -50,11 +67,13 @@ export async function GET(req: Request) {
         course,
         liveClass: liveClass || null,
         recordings: recordings || [],
+        materials: materials || [],
+        assignments: assignments || [],
         studentCount: studentCount || 0,
       });
     }
 
-    // 2. Fetch all courses with student & recording counts
+    // Fetch all courses overview
     const { data: courses, error } = await supabaseAdmin
       .from('courses')
       .select('*')
@@ -127,6 +146,8 @@ export async function POST(req: Request) {
 
       await supabaseAdmin.from('live_classes').delete().eq('course_id', courseId);
       await supabaseAdmin.from('recordings').delete().eq('course_id', courseId);
+      await supabaseAdmin.from('course_materials').delete().eq('course_id', courseId);
+      await supabaseAdmin.from('assignments').delete().eq('course_id', courseId);
       await supabaseAdmin.from('course_enrollments').delete().eq('course_id', courseId);
 
       const { error } = await supabaseAdmin.from('courses').delete().eq('id', courseId);
@@ -135,7 +156,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, message: 'පාඨමාලාව සාර්ථකව ඉවත් කරන ලදී.' });
     }
 
-    // ACTION 3: AUTO SCHEDULE ZOOM MEETING (WITH MEETING ID FOR WEBHOOK AUTO-RECORDING)
+    // ACTION 3: AUTO SCHEDULE ZOOM MEETING
     if (action === 'schedule_live_class') {
       const { courseId, title, date, time } = body;
       if (!courseId || !title) {
@@ -143,14 +164,9 @@ export async function POST(req: Request) {
       }
 
       const startDateTime = `${date || new Date().toISOString().split('T')[0]}T${time || '19:00'}:00`;
-      
-      // Auto-create Zoom meeting via API / Simulation
       const zoomMeeting = await createAutoZoomMeeting(title, startDateTime);
-
-      // Student will use this secure proxy route to join
       const secureJoinUrl = `/api/zoom/join?courseId=${courseId}&meetingId=${zoomMeeting.meetingId}`;
 
-      // Clean previous live class for this course
       await supabaseAdmin.from('live_classes').delete().eq('course_id', courseId);
 
       const { data, error } = await supabaseAdmin
@@ -162,7 +178,7 @@ export async function POST(req: Request) {
             date: date || new Date().toISOString().split('T')[0],
             time: time || '19:00',
             zoom_join_url: secureJoinUrl,
-            meeting_id: zoomMeeting.meetingId, // Webhook එකෙන් Auto Recording එක හඳුනාගැනීමට meeting_id සුරකියි
+            meeting_id: zoomMeeting.meetingId,
           },
         ])
         .select()
@@ -187,7 +203,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true });
     }
 
-    // ACTION 5: ADD RECORDING
+    // ACTION 5: ADD YOUTUBE RECORDING
     if (action === 'add_recording') {
       const { courseId, title, lesson_date, duration, video_id } = body;
       if (!courseId || !title || !video_id) {
@@ -216,6 +232,74 @@ export async function POST(req: Request) {
     if (action === 'delete_recording') {
       const { recordingId } = body;
       const { error } = await supabaseAdmin.from('recordings').delete().eq('id', recordingId);
+      if (error) throw error;
+      return NextResponse.json({ success: true });
+    }
+
+    // ACTION 7: ADD COURSE MATERIAL / TUTE
+    if (action === 'add_material') {
+      const { courseId, title, description, file_url, file_name, file_size } = body;
+      if (!courseId || !title || !file_url) {
+        return NextResponse.json({ error: 'මාතෘකාව සහ ගොනුව (PDF) අනිවාර්යයි.' }, { status: 400 });
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from('course_materials')
+        .insert([
+          {
+            course_id: courseId,
+            title,
+            description: description || '',
+            file_url,
+            file_name: file_name || 'Tute.pdf',
+            file_size: file_size || 'PDF Document',
+          },
+        ])
+        .select()
+        .single();
+
+      if (error) throw error;
+      return NextResponse.json({ success: true, material: data });
+    }
+
+    // ACTION 8: DELETE COURSE MATERIAL / TUTE
+    if (action === 'delete_material') {
+      const { materialId } = body;
+      const { error } = await supabaseAdmin.from('course_materials').delete().eq('id', materialId);
+      if (error) throw error;
+      return NextResponse.json({ success: true });
+    }
+
+    // ACTION 9: ADD ASSIGNMENT (WITH DEADLINE)
+    if (action === 'add_assignment') {
+      const { courseId, title, description, file_url, due_date, total_marks } = body;
+      if (!courseId || !title || !due_date) {
+        return NextResponse.json({ error: 'මාතෘකාව සහ අවසන් දිනය (Deadline) අනිවාර්යයි.' }, { status: 400 });
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from('assignments')
+        .insert([
+          {
+            course_id: courseId,
+            title,
+            description: description || '',
+            file_url: file_url || null,
+            due_date,
+            total_marks: Number(total_marks) || 100,
+          },
+        ])
+        .select()
+        .single();
+
+      if (error) throw error;
+      return NextResponse.json({ success: true, assignment: data });
+    }
+
+    // ACTION 10: DELETE ASSIGNMENT
+    if (action === 'delete_assignment') {
+      const { assignmentId } = body;
+      const { error } = await supabaseAdmin.from('assignments').delete().eq('id', assignmentId);
       if (error) throw error;
       return NextResponse.json({ success: true });
     }
