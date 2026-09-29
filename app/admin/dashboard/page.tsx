@@ -4,10 +4,17 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { 
   BookOpen, Video, Users, Plus, Trash2, ArrowLeft, 
-  Calendar, Clock, Link as LinkIcon, Film, PlayCircle,
+  Calendar, Clock, Film, PlayCircle,
   CheckCircle, AlertCircle, X, Shield, RefreshCw, Smartphone,
-  Search, Unlock, Lock, PhoneCall, CreditCard, Eye, Check, ExternalLink, Sparkles, ChevronDown, ChevronUp
+  Search, Unlock, Lock, PhoneCall, CreditCard, Eye, Check, ExternalLink, Sparkles
 } from 'lucide-react';
+
+// Custom YouTube SVG Icon (lucide-react හි ඇති වූ export error එක වළක්වා ගැනීමට)
+const Youtube = ({ className = "w-4 h-4" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+  </svg>
+);
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<'courses' | 'students' | 'devices' | 'slips'>('courses');
@@ -35,18 +42,17 @@ export default function AdminDashboard() {
   const [newCourseFee, setNewCourseFee] = useState('1500');
   const [creatingCourse, setCreatingCourse] = useState(false);
 
-  // Live Class form states (Auto-generated - No manual URL needed)
+  // Live Class form states
   const [schedTitle, setSchedTitle] = useState('');
   const [schedDate, setSchedDate] = useState('');
   const [schedTime, setSchedTime] = useState('19:00');
   const [savingLiveClass, setSavingLiveClass] = useState(false);
 
-  // Recordings form states & toggle
-  const [showManualRecForm, setShowManualRecForm] = useState(false);
+  // YouTube Recordings form states
   const [recTitle, setRecTitle] = useState('');
   const [recDate, setRecDate] = useState('');
   const [recDuration, setRecDuration] = useState('2h 30m');
-  const [recVideoId, setRecVideoId] = useState('');
+  const [recYoutubeUrl, setRecYoutubeUrl] = useState('');
   const [savingRecording, setSavingRecording] = useState(false);
 
   // Add Student Form State
@@ -174,7 +180,7 @@ export default function AdminDashboard() {
   };
 
   const handleRejectSlip = async (slip: any) => {
-    if (!confirm(`${slip.studentName} ගේ මෙම රිසිට්පත ප්‍රතික්ෂේප (Reject) කිරීමට අවශ්‍ය බව සහතිකද?`)) return;
+    if (!confirm(`${slip.studentName} ගේ මෙම රිසිට්පත ප්‍රතික්ෂේප කිරීමට අවශ්‍ය බව සහතිකද?`)) return;
 
     setProcessingSlipId(slip.id);
     try {
@@ -302,7 +308,7 @@ export default function AdminDashboard() {
   };
 
   const handleDeleteCourse = async (courseId: string, title: string) => {
-    if (!confirm(`"${title}" පන්තිය සම්පූර්ණයෙන්ම ඉවත් කිරීමට අවශ්‍යද? මෙහි ඇති Zoom links, Recordings සහ Enrollments සියල්ල මැකී යනු ඇත.`)) {
+    if (!confirm(`"${title}" පන්තිය සම්පූර්ණයෙන්ම ඉවත් කිරීමට අවශ්‍යද? මෙහි ඇති සියලු දත්ත මැකී යනු ඇත.`)) {
       return;
     }
     try {
@@ -370,9 +376,23 @@ export default function AdminDashboard() {
     }
   };
 
+  // YouTube Link එකෙන් Video ID (11 chars) එක auto extract කිරීම
+  const extractYouTubeId = (url: string) => {
+    const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+    return match ? match[1] : url.trim();
+  };
+
+  // Add YouTube Recording
   const handleAddRecording = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCourseForManage) return;
+
+    const parsedVideoId = extractYouTubeId(recYoutubeUrl);
+    if (!parsedVideoId || parsedVideoId.length !== 11) {
+      alert('වලංගු YouTube Link එකක් ඇතුළත් කරන්න (උදා: https://youtu.be/... හෝ https://www.youtube.com/watch?v=...)');
+      return;
+    }
+
     setSavingRecording(true);
     try {
       const res = await fetch('/api/manage-courses', {
@@ -384,17 +404,16 @@ export default function AdminDashboard() {
           title: recTitle,
           lesson_date: recDate,
           duration: recDuration,
-          video_id: recVideoId,
+          video_id: parsedVideoId,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
-      alert('Recording එක සාර්ථකව Playlist එකට එක් කරන ලදී!');
+      alert('YouTube Recording එක සාර්ථකව පන්තියට එක් කරන ලදී!');
       setCourseRecordings(prev => [data.recording, ...prev]);
       setRecTitle('');
-      setRecVideoId('');
-      setShowManualRecForm(false);
+      setRecYoutubeUrl('');
     } catch (err: any) {
       alert('දෝෂයකි: ' + err.message);
     } finally {
@@ -568,7 +587,7 @@ export default function AdminDashboard() {
 🔑 Password: ${createdStudentData.password}
 
 ⚠️ ආරක්ෂක උපදෙස්: 
-ඔබ පළමුව Login වන උපාංගයට (Phone හෝ Laptop) ඔබගේ ගිණුම ස්වයංක්‍රීයව ලොක් වේ. එබැවින් ඔබේ පෞද්ගලික උපාංගයෙන් පමණක් Login වන්න.`;
+ඔබ පළමුව Login වන උපාංගයට ඔබගේ ගිණුම ස්වයංක්‍රීයව ලොක් වේ. එබැවින් ඔබේ පෞද්ගලික උපාංගයෙන් පමණක් Login වන්න.`;
   };
 
   const filteredStudents = studentsList.filter(s =>
@@ -695,7 +714,7 @@ export default function AdminDashboard() {
                 ) : (
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
                     
-                    {/* Live Zoom Class Section (Left Column) */}
+                    {/* Live Zoom Class Section */}
                     <div className="bg-[#0c1322] border border-slate-800/80 rounded-2xl p-6 shadow-xl space-y-6">
                       <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                         <div className="flex items-center gap-2">
@@ -749,7 +768,6 @@ export default function AdminDashboard() {
                         </div>
                       )}
 
-                      {/* 1-Click Auto Zoom Schedule Form */}
                       <form onSubmit={handleSaveLiveClass} className="space-y-4 pt-2">
                         <div className="flex items-center justify-between">
                           <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
@@ -805,133 +823,105 @@ export default function AdminDashboard() {
                       </form>
                     </div>
 
-                    {/* Recordings Hub Section (Right Column - Balanced & Clean) */}
+                    {/* YouTube Recordings Section */}
                     <div className="bg-[#0c1322] border border-slate-800/80 rounded-2xl p-6 shadow-xl space-y-5">
                       <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                         <div className="flex items-center gap-2">
-                          <Film className="w-5 h-5 text-blue-400" />
+                          <Film className="w-5 h-5 text-red-500" />
                           <h3 className="font-bold text-base">Class Recordings ({courseRecordings.length})</h3>
                         </div>
-                        <span className="px-2.5 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-bold">
-                          DRM Secured
+                        <span className="px-2.5 py-0.5 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 text-[10px] font-bold flex items-center gap-1">
+                          <Youtube className="w-3 h-3" /> YouTube Package Data
                         </span>
                       </div>
 
-                      {/* Automated Cloud Sync Active Info Card */}
-                      <div className="p-4 rounded-xl bg-gradient-to-r from-blue-950/40 via-purple-950/30 to-slate-900 border border-blue-500/30 flex items-start justify-between gap-3 shadow-inner">
-                        <div className="flex items-start gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-blue-500/20 border border-blue-500/30 text-blue-400 flex items-center justify-center shrink-0 mt-0.5">
-                            <Sparkles className="w-4 h-4" />
+                      {/* Add YouTube Recording Form */}
+                      <form onSubmit={handleAddRecording} className="space-y-3 bg-[#131c31] p-4 rounded-xl border border-slate-800">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-xs font-bold text-slate-200">➕ YouTube Recording එකක් එක් කරන්න</h4>
+                          <span className="text-[10px] text-slate-400">Unlisted Videos Only</span>
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] text-slate-400 mb-1">පාඩමේ නම / මාතෘකාව *</label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="උදා: පාඩම 02: සම්පූර්ණ විවරණය"
+                            value={recTitle}
+                            onChange={(e) => setRecTitle(e.target.value)}
+                            className="w-full bg-[#0c1322] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-red-500"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[11px] text-slate-400 mb-1">පැවැත්වූ දිනය</label>
+                            <input
+                              type="date"
+                              required
+                              value={recDate}
+                              onChange={(e) => setRecDate(e.target.value)}
+                              className="w-full bg-[#0c1322] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-red-500"
+                            />
                           </div>
                           <div>
-                            <div className="flex items-center gap-2">
-                              <h4 className="text-xs font-bold text-white">ස්වයංක්‍රීය Cloud Recording Sync</h4>
-                              <span className="px-2 py-0.2 rounded-full bg-emerald-500/20 text-emerald-400 text-[9px] font-bold">
-                                ACTIVE
-                              </span>
-                            </div>
-                            <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
-                              Zoom පන්තිය අවසන් වූ සැනින් Recording එක Bunny Stream හරහා ස්වයංක්‍රීයව මෙහි සහ සිසුන්ගේ Dashboard එකේ සක්‍රිය වේ.
-                            </p>
+                            <label className="block text-[11px] text-slate-400 mb-1">කාලය (Duration)</label>
+                            <input
+                              type="text"
+                              placeholder="2h 15m"
+                              value={recDuration}
+                              onChange={(e) => setRecDuration(e.target.value)}
+                              className="w-full bg-[#0c1322] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-red-500"
+                            />
                           </div>
                         </div>
+
+                        <div>
+                          <label className="block text-[11px] text-slate-400 mb-1">YouTube Unlisted Link එක (හෝ Video ID) *</label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="https://youtu.be/xxxxxx හෝ https://www.youtube.com/watch?v=xxxxxx"
+                            value={recYoutubeUrl}
+                            onChange={(e) => setRecYoutubeUrl(e.target.value)}
+                            className="w-full bg-[#0c1322] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-red-300 font-mono focus:outline-none focus:border-red-500"
+                          />
+                          <p className="text-[10px] text-slate-500 mt-1">
+                            💡 YouTube හි Privacy එක <strong>Unlisted</strong> ලෙස සකසා ලින්ක් එක මෙහි Paste කරන්න.
+                          </p>
+                        </div>
+
                         <button
-                          type="button"
-                          onClick={() => setShowManualRecForm(!showManualRecForm)}
-                          className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[11px] font-semibold transition shrink-0 border border-slate-700 cursor-pointer flex items-center gap-1"
+                          type="submit"
+                          disabled={savingRecording}
+                          className="w-full bg-red-600 hover:bg-red-500 text-white font-semibold py-2.5 rounded-xl text-xs transition shadow-lg shadow-red-600/20 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5"
                         >
-                          <span>{showManualRecForm ? 'Hide Form' : '+ Manual Add'}</span>
-                          {showManualRecForm ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                          <Youtube className="w-3.5 h-3.5" />
+                          <span>{savingRecording ? 'එක්වෙමින් පවතී...' : '+ Recording එක Playlist එකට එක් කරන්න'}</span>
                         </button>
-                      </div>
-
-                      {/* Optional Collapsible Manual Add Form */}
-                      {showManualRecForm && (
-                        <form onSubmit={handleAddRecording} className="space-y-3 bg-[#131c31] p-4 rounded-xl border border-blue-500/30 animate-in fade-in duration-200">
-                          <div className="flex items-center justify-between pb-1 border-b border-slate-800">
-                            <h4 className="text-xs font-bold text-blue-300">➕ අතින් Recording එකක් එකතු කිරීම (Fallback)</h4>
-                            <span className="text-[10px] text-slate-500">අවශ්‍ය නම් පමණක්</span>
-                          </div>
-
-                          <div>
-                            <label className="block text-[11px] text-slate-400 mb-1">පාඩමේ නම / මාතෘකාව *</label>
-                            <input
-                              type="text"
-                              required
-                              placeholder="උදා: පාඩම 02: සම්පූර්ණ විවරණය"
-                              value={recTitle}
-                              onChange={(e) => setRecTitle(e.target.value)}
-                              className="w-full bg-[#0c1322] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
-                            />
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-3">
-                            <div>
-                              <label className="block text-[11px] text-slate-400 mb-1">පැවැත්වූ දිනය</label>
-                              <input
-                                type="date"
-                                required
-                                value={recDate}
-                                onChange={(e) => setRecDate(e.target.value)}
-                                className="w-full bg-[#0c1322] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-[11px] text-slate-400 mb-1">කාලය (Duration)</label>
-                              <input
-                                type="text"
-                                placeholder="2h 15m"
-                                value={recDuration}
-                                onChange={(e) => setRecDuration(e.target.value)}
-                                className="w-full bg-[#0c1322] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
-                              />
-                            </div>
-                          </div>
-
-                          <div>
-                            <label className="block text-[11px] text-slate-400 mb-1">Bunny Video ID (හෝ Embed Video ID) *</label>
-                            <input
-                              type="text"
-                              required
-                              placeholder="උදා: d27c8192-3a81-4321-9988-xxxx"
-                              value={recVideoId}
-                              onChange={(e) => setRecVideoId(e.target.value)}
-                              className="w-full bg-[#0c1322] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-blue-300 font-mono focus:outline-none focus:border-blue-500"
-                            />
-                          </div>
-
-                          <button
-                            type="submit"
-                            disabled={savingRecording}
-                            className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-2.5 rounded-xl text-xs transition shadow-lg shadow-blue-600/20 disabled:opacity-50 cursor-pointer"
-                          >
-                            {savingRecording ? 'එක්වෙමින් පවතී...' : '+ Recording එක Playlist එකට Save කරන්න'}
-                          </button>
-                        </form>
-                      )}
+                      </form>
 
                       {/* Recordings List */}
-                      <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
+                      <div className="space-y-2.5 max-h-[340px] overflow-y-auto pr-1">
                         {courseRecordings.length === 0 ? (
-                          <div className="p-10 rounded-xl bg-slate-900/30 border border-dashed border-slate-800 text-center space-y-2">
-                            <Film className="w-8 h-8 text-slate-600 mx-auto" />
+                          <div className="p-8 rounded-xl bg-slate-900/30 border border-dashed border-slate-800 text-center space-y-1">
+                            <Film className="w-7 h-7 text-slate-600 mx-auto" />
                             <div className="text-xs font-semibold text-slate-400">මෙම පන්තියට තවම Recordings නොමැත.</div>
-                            <p className="text-[11px] text-slate-500 max-w-xs mx-auto">
-                              පන්තිය පවත්වා අවසන් වූ පසු Zoom Recording එක ස්වයංක්‍රීයව මෙහි දිස්වනු ඇත.
-                            </p>
+                            <p className="text-[10px] text-slate-500">YouTube Unlisted Link එක දමා Playlist එකට එක් කරන්න.</p>
                           </div>
                         ) : (
                           courseRecordings.map((rec) => (
                             <div key={rec.id} className="p-3.5 rounded-xl bg-[#131c31] border border-slate-800 hover:border-slate-700 transition flex items-center justify-between group">
                               <div className="space-y-1 pr-3">
                                 <div className="flex items-center gap-2">
-                                  <PlayCircle className="w-4 h-4 text-blue-400 shrink-0" />
-                                  <h5 className="text-xs font-semibold text-white line-clamp-1 group-hover:text-blue-300 transition">{rec.title}</h5>
+                                  <PlayCircle className="w-4 h-4 text-red-400 shrink-0" />
+                                  <h5 className="text-xs font-semibold text-white line-clamp-1 group-hover:text-red-300 transition">{rec.title}</h5>
                                 </div>
                                 <div className="flex items-center gap-3 text-[10px] text-slate-400 pl-6">
                                   <span>📅 {rec.lesson_date}</span>
                                   <span>⏱️ {rec.duration || '2h 30m'}</span>
-                                  <span className="font-mono text-blue-400">ID: {rec.video_id?.substring(0, 8)}...</span>
+                                  <span className="font-mono text-red-400">YT: {rec.video_id}</span>
                                 </div>
                               </div>
                               <button
@@ -946,10 +936,9 @@ export default function AdminDashboard() {
                         )}
                       </div>
 
-                      {/* Footer Info */}
-                      <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500">
-                        <span>🛡️ Floating Dynamic Watermark Enabled</span>
-                        <span>{courseRecordings.length} Recordings Total</span>
+                      <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500">
+                        <span>🛡️ Floating Dynamic Watermark & Anti-Click Shield Enabled</span>
+                        <span>{courseRecordings.length} Recordings</span>
                       </div>
                     </div>
 
@@ -1013,7 +1002,7 @@ export default function AdminDashboard() {
                               <span>{c.studentCount || 0} සිසුන්</span>
                             </span>
                             <span className="flex items-center gap-1.5">
-                              <Film className="w-3.5 h-3.5 text-blue-400" />
+                              <Film className="w-3.5 h-3.5 text-red-400" />
                               <span>{c.recordingCount || 0} Recordings</span>
                             </span>
                           </div>
