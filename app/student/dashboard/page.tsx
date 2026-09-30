@@ -193,11 +193,15 @@ export default function StudentDashboard() {
 
   return (
     <div className="min-h-screen bg-[#070b14] text-white p-4 md:p-8 font-sans select-none">
-      {/* Top Header with Brand Logo */}
+      {/* Top Header with Enlarged Clean Logo Tile */}
       <header className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-6 border-b border-slate-800 max-w-7xl mx-auto">
         <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-2xl bg-white/5 border border-purple-500/30 flex items-center justify-center p-1.5 shadow-xl shadow-purple-500/10 overflow-hidden backdrop-blur-md">
-            <img src="/logo.png" alt="Learn ICT with Mano" className="w-full h-full object-contain" />
+          <div className="w-13 h-13 md:w-14 md:h-14 rounded-2xl bg-white border-2 border-purple-500/50 flex items-center justify-center shadow-xl shadow-purple-500/25 overflow-hidden shrink-0">
+            <img 
+              src="/logo.png" 
+              alt="Learn ICT with Mano" 
+              className="w-full h-full object-contain scale-[2.4] transform" 
+            />
           </div>
           <div>
             <h1 className="text-lg font-black tracking-tight text-white flex items-center gap-2">

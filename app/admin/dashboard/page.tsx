@@ -750,7 +750,7 @@ export default function AdminDashboard() {
 🔑 Password: ${createdStudentData.password}
 
 ⚠️ ආරක්ෂක උපදෙස්: 
-ඔබ පළමුව Login වන උපාංගයට ඔබගේ ගිණුම ස්වයංක්‍රීයව ලොක් වේ. එබැවින් ඔබේ පෞද්ගලික උපාංගයෙන් පමණක් Login වන්න.`;
+ඔබ පළමුව Login වන උපාංගයට ඔබගේ ගිණුම ස්වයංක්‍‍රීයව ලොක් වේ. එබැවින් ඔබේ පෞද්ගලික උපාංගයෙන් පමණක් Login වන්න.`;
   };
 
   const filteredStudents = studentsList.filter(s =>
@@ -777,11 +777,15 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-[#070b14] text-white p-6 md:p-10 font-sans">
-      {/* Top Header with Brand Logo */}
+      {/* Top Header with Enlarged Clean Logo Tile */}
       <header className="flex flex-col md:flex-row items-center justify-between gap-4 pb-8 border-b border-slate-800">
         <div className="flex items-center gap-3.5">
-          <div className="w-13 h-13 rounded-2xl bg-white/5 border border-purple-500/30 flex items-center justify-center p-1.5 shadow-xl shadow-purple-500/10 overflow-hidden backdrop-blur-md">
-            <img src="/logo.png" alt="Learn ICT with Mano" className="w-full h-full object-contain" />
+          <div className="w-14 h-14 rounded-2xl bg-white border-2 border-purple-500/50 flex items-center justify-center shadow-xl shadow-purple-500/25 overflow-hidden shrink-0">
+            <img 
+              src="/logo.png" 
+              alt="Learn ICT with Mano" 
+              className="w-full h-full object-contain scale-[2.4] transform" 
+            />
           </div>
           <div>
             <h1 className="text-xl font-black tracking-tight text-white flex items-center gap-2">
@@ -877,7 +881,7 @@ export default function AdminDashboard() {
                   </button>
                 </div>
 
-                {/* Sub-Tab Navigation inside Course Hub */}
+                {/* Sub-Tabs Navigation */}
                 <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
                   <button
                     onClick={() => setCourseSectionTab('live_recordings')}
@@ -1885,7 +1889,7 @@ export default function AdminDashboard() {
                         <th className="py-3.5 px-4">දුරකථන අංකය</th>
                         <th className="py-3.5 px-4">Device Status</th>
                         <th className="py-3.5 px-4">Device Identifier</th>
-                        <th className="py-3.5 px-4 text-center">ක්‍‍රියාමාර්ගය (Action)</th>
+                        <th className="py-3.5 px-4 text-center">ක්‍රියාමාර්ගය (Action)</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/60">
