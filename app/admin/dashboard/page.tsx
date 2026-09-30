@@ -6,10 +6,11 @@ import {
   BookOpen, Video, Users, Plus, Trash2, ArrowLeft, 
   Calendar, Clock, Film, PlayCircle,
   CheckCircle, AlertCircle, X, Shield, RefreshCw, Smartphone,
-  Search, Unlock, Lock, PhoneCall, CreditCard, Eye, Check, ExternalLink, Sparkles
+  Search, Unlock, Lock, PhoneCall, CreditCard, Eye, Check, ExternalLink, Sparkles,
+  FileText, UploadCloud, File, Award, AlertTriangle, Download
 } from 'lucide-react';
 
-// Custom YouTube SVG Icon (lucide-react හි ඇති වූ export error එක වළක්වා ගැනීමට)
+// Custom YouTube SVG Icon
 const Youtube = ({ className = "w-4 h-4" }: { className?: string }) => (
   <svg className={className} viewBox="0 0 24 24" fill="currentColor">
     <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
@@ -29,8 +30,11 @@ export default function AdminDashboard() {
 
   // Course Hub Management States
   const [selectedCourseForManage, setSelectedCourseForManage] = useState<any | null>(null);
+  const [courseSectionTab, setCourseSectionTab] = useState<'live_recordings' | 'materials' | 'assignments'>('live_recordings');
   const [courseLiveClass, setCourseLiveClass] = useState<any | null>(null);
   const [courseRecordings, setCourseRecordings] = useState<any[]>([]);
+  const [courseMaterials, setCourseMaterials] = useState<any[]>([]);
+  const [courseAssignments, setCourseAssignments] = useState<any[]>([]);
   const [courseStudentCount, setCourseStudentCount] = useState<number>(0);
   const [loadingManageDetails, setLoadingManageDetails] = useState<boolean>(false);
 
@@ -54,6 +58,21 @@ export default function AdminDashboard() {
   const [recDuration, setRecDuration] = useState('2h 30m');
   const [recYoutubeUrl, setRecYoutubeUrl] = useState('');
   const [savingRecording, setSavingRecording] = useState(false);
+
+  // Tutes / Study Materials Form State
+  const [matTitle, setMatTitle] = useState('');
+  const [matDesc, setMatDesc] = useState('');
+  const [matFile, setMatFile] = useState<File | null>(null);
+  const [savingMaterial, setSavingMaterial] = useState(false);
+
+  // Assignments Form State (with Deadline)
+  const [assignTitle, setAssignTitle] = useState('');
+  const [assignDesc, setAssignDesc] = useState('');
+  const [assignDueDate, setAssignDueDate] = useState('');
+  const [assignDueTime, setAssignDueTime] = useState('23:59');
+  const [assignMarks, setAssignMarks] = useState('100');
+  const [assignFile, setAssignFile] = useState<File | null>(null);
+  const [savingAssignment, setSavingAssignment] = useState(false);
 
   // Add Student Form State
   const [fullName, setFullName] = useState('');
@@ -264,6 +283,8 @@ export default function AdminDashboard() {
         setSelectedCourseForManage(data.course);
         setCourseLiveClass(data.liveClass);
         setCourseRecordings(data.recordings || []);
+        setCourseMaterials(data.materials || []);
+        setCourseAssignments(data.assignments || []);
         setCourseStudentCount(data.studentCount || 0);
       }
     } catch (e) {
@@ -275,6 +296,7 @@ export default function AdminDashboard() {
 
   const handleSelectCourseToManage = (course: any) => {
     setSelectedCourseForManage(course);
+    setCourseSectionTab('live_recordings');
     fetchCourseDetailedInfo(course.id.toString());
   };
 
@@ -376,7 +398,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // YouTube Link එකෙන් Video ID (11 chars) එක auto extract කිරීම
+  // Helper to extract YouTube Video ID
   const extractYouTubeId = (url: string) => {
     const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
     return match ? match[1] : url.trim();
@@ -432,6 +454,155 @@ export default function AdminDashboard() {
       if (res.ok) {
         setCourseRecordings(prev => prev.filter(r => r.id !== recId));
         alert('Recording එක ඉවත් කරන ලදී.');
+      }
+    } catch (e: any) {
+      alert('දෝෂයකි: ' + e.message);
+    }
+  };
+
+  // Upload File directly to Supabase Storage Helper
+  const uploadToStorage = async (file: File, folder: string) => {
+    const fileExt = file.name.split('.').pop();
+    const cleanFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const storagePath = `${folder}/${Date.now()}_${cleanFileName}`;
+
+    const { error: uploadErr } = await supabase.storage
+      .from('lms-materials')
+      .upload(storagePath, file, { cacheControl: '3600', upsert: true });
+
+    if (uploadErr) throw uploadErr;
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('lms-materials')
+      .getPublicUrl(storagePath);
+
+    return {
+      publicUrl,
+      fileName: file.name,
+      fileSize: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
+    };
+  };
+
+  // Add Tute / Study Material
+  const handleAddMaterial = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedCourseForManage || !matFile) {
+      alert('කරුණාකර PDF හෝ Study Material ගොනුවක් තෝරන්න.');
+      return;
+    }
+
+    setSavingMaterial(true);
+    try {
+      const { publicUrl, fileName, fileSize } = await uploadToStorage(matFile, 'tutes');
+
+      const res = await fetch('/api/manage-courses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'add_material',
+          courseId: selectedCourseForManage.id,
+          title: matTitle,
+          description: matDesc,
+          file_url: publicUrl,
+          file_name: fileName,
+          file_size: fileSize,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      alert('ටියූට් / සටහන සාර්ථකව පන්තියට එක් කරන ලදී!');
+      setCourseMaterials(prev => [data.material, ...prev]);
+      setMatTitle('');
+      setMatDesc('');
+      setMatFile(null);
+    } catch (err: any) {
+      alert('ගොනුව එක් කිරීම අසාර්ථක විය: ' + err.message);
+    } finally {
+      setSavingMaterial(false);
+    }
+  };
+
+  const handleDeleteMaterial = async (materialId: string) => {
+    if (!confirm('මෙම නිබන්ධනය ඉවත් කිරීමට අවශ්‍යද?')) return;
+    try {
+      const res = await fetch('/api/manage-courses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete_material', materialId }),
+      });
+      if (res.ok) {
+        setCourseMaterials(prev => prev.filter(m => m.id !== materialId));
+        alert('නිබන්ධනය සාර්ථකව ඉවත් කරන ලදී.');
+      }
+    } catch (e: any) {
+      alert('දෝෂයකි: ' + e.message);
+    }
+  };
+
+  // Add Assignment with Deadline
+  const handleAddAssignment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedCourseForManage) return;
+
+    if (!assignDueDate) {
+      alert('කරුණාකර අවසන් භාරදිය යුතු දිනය (Deadline Date) තෝරන්න.');
+      return;
+    }
+
+    setSavingAssignment(true);
+    try {
+      let fileUrl = null;
+      if (assignFile) {
+        const uploaded = await uploadToStorage(assignFile, 'assignments');
+        fileUrl = uploaded.publicUrl;
+      }
+
+      const dueDateTime = `${assignDueDate}T${assignDueTime || '23:59'}:00Z`;
+
+      const res = await fetch('/api/manage-courses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'add_assignment',
+          courseId: selectedCourseForManage.id,
+          title: assignTitle,
+          description: assignDesc,
+          due_date: dueDateTime,
+          total_marks: assignMarks,
+          file_url: fileUrl,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      alert('පැවරුම (Assignment) සාර්ථකව සකස් කරන ලදී!');
+      setCourseAssignments(prev => [data.assignment, ...prev]);
+      setAssignTitle('');
+      setAssignDesc('');
+      setAssignDueDate('');
+      setAssignMarks('100');
+      setAssignFile(null);
+    } catch (err: any) {
+      alert('දෝෂයකි: ' + err.message);
+    } finally {
+      setSavingAssignment(false);
+    }
+  };
+
+  const handleDeleteAssignment = async (assignmentId: string) => {
+    if (!confirm('මෙම Assignment එක සම්පූර්ණයෙන්ම ඉවත් කිරීමට අවශ්‍යද?')) return;
+    try {
+      const res = await fetch('/api/manage-courses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete_assignment', assignmentId }),
+      });
+      if (res.ok) {
+        setCourseAssignments(prev => prev.filter(a => a.id !== assignmentId));
+        alert('Assignment එක ඉවත් කරන ලදී.');
       }
     } catch (e: any) {
       alert('දෝෂයකි: ' + e.message);
@@ -678,7 +849,9 @@ export default function AdminDashboard() {
           <div className="space-y-6">
             {selectedCourseForManage ? (
               <div className="space-y-6">
-                <div className="flex flex-wrap items-center justify-between gap-4 bg-[#0c1322] border border-slate-800 p-5 rounded-2xl">
+                
+                {/* Course Header Bar */}
+                <div className="flex flex-wrap items-center justify-between gap-4 bg-[#0c1322] border border-slate-800 p-5 rounded-2xl shadow-xl">
                   <div className="flex items-center gap-3">
                     <button
                       onClick={() => setSelectedCourseForManage(null)}
@@ -709,241 +882,562 @@ export default function AdminDashboard() {
                   </button>
                 </div>
 
+                {/* Sub-Tab Navigation inside Course Hub */}
+                <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+                  <button
+                    onClick={() => setCourseSectionTab('live_recordings')}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
+                      courseSectionTab === 'live_recordings'
+                        ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/20'
+                        : 'bg-[#131c31] text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Video className="w-4 h-4" />
+                    <span>🎥 Live & Recordings ({courseRecordings.length})</span>
+                  </button>
+
+                  <button
+                    onClick={() => setCourseSectionTab('materials')}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
+                      courseSectionTab === 'materials'
+                        ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/20'
+                        : 'bg-[#131c31] text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <FileText className="w-4 h-4 text-emerald-400" />
+                    <span>📑 Tutes & Study Materials ({courseMaterials.length})</span>
+                  </button>
+
+                  <button
+                    onClick={() => setCourseSectionTab('assignments')}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
+                      courseSectionTab === 'assignments'
+                        ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/20'
+                        : 'bg-[#131c31] text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Award className="w-4 h-4 text-amber-400" />
+                    <span>📝 Assignments & Deadlines ({courseAssignments.length})</span>
+                  </button>
+                </div>
+
                 {loadingManageDetails ? (
                   <div className="p-16 text-center text-slate-400">පන්තියේ දත්ත ලබාගනිමින් පවතී...</div>
                 ) : (
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
-                    
-                    {/* Live Zoom Class Section */}
-                    <div className="bg-[#0c1322] border border-slate-800/80 rounded-2xl p-6 shadow-xl space-y-6">
-                      <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-                        <div className="flex items-center gap-2">
-                          <Video className="w-5 h-5 text-purple-400" />
-                          <h3 className="font-bold text-base">සජීවී Zoom පන්තිය (Live Class)</h3>
-                        </div>
-                        {courseLiveClass && (
-                          <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold">
-                            SCHEDULED
-                          </span>
-                        )}
-                      </div>
-
-                      {courseLiveClass ? (
-                        <div className="p-5 rounded-xl bg-[#131c31] border border-purple-500/30 space-y-3">
-                          <div className="flex items-start justify-between">
-                            <div>
-                              <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400">වත්මන් සජීවී කාලසටහන</span>
-                              <h4 className="text-base font-bold text-white mt-0.5">{courseLiveClass.title}</h4>
+                  <>
+                    {/* SECTION 1: LIVE CLASS & YOUTUBE RECORDINGS */}
+                    {courseSectionTab === 'live_recordings' && (
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+                        
+                        {/* Live Zoom Class Section */}
+                        <div className="bg-[#0c1322] border border-slate-800/80 rounded-2xl p-6 shadow-xl space-y-6">
+                          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                            <div className="flex items-center gap-2">
+                              <Video className="w-5 h-5 text-purple-400" />
+                              <h3 className="font-bold text-base">සජීවී Zoom පන්තිය (Live Class)</h3>
                             </div>
-                            <button
-                              onClick={() => handleDeleteLiveClass(courseLiveClass.id)}
-                              className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition cursor-pointer"
-                              title="Schedule එක ඉවත් කරන්න"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            {courseLiveClass && (
+                              <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold">
+                                SCHEDULED
+                              </span>
+                            )}
                           </div>
-                          <div className="flex flex-wrap gap-4 text-xs text-slate-300">
-                            <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-purple-400" /> {courseLiveClass.date}</span>
-                            <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-purple-400" /> {courseLiveClass.time}</span>
-                          </div>
-                          <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-xs">
-                            <span className="text-slate-400 flex items-center gap-1 text-[11px]">
-                              🛡️ <strong className="text-emerald-400">Anti-Leak Gateway:</strong> Link එක ආරක්ෂිතයි
-                            </span>
-                            <a
-                              href={courseLiveClass.zoom_join_url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-purple-400 hover:underline inline-flex items-center gap-1 text-[11px]"
-                            >
-                              <ExternalLink className="w-3 h-3" />
-                              <span>පරීක්ෂා කරන්න (Test)</span>
-                            </a>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="p-4 rounded-xl bg-slate-900/50 border border-dashed border-slate-800 text-center text-xs text-slate-500">
-                          මෙම පන්තියට තවමත් සජීවී Zoom Link එකක් Schedule කර නොමැත.
-                        </div>
-                      )}
 
-                      <form onSubmit={handleSaveLiveClass} className="space-y-4 pt-2">
-                        <div className="flex items-center justify-between">
-                          <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                            {courseLiveClass ? 'අලුත් Zoom පන්තියක් Schedule කිරීම (Update)' : 'නව Zoom පන්තියක් Schedule කරන්න'}
-                          </h4>
-                          <span className="text-[10px] text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/20 font-semibold flex items-center gap-1">
-                            <Sparkles className="w-3 h-3" /> Auto-Generated
-                          </span>
-                        </div>
-
-                        <div>
-                          <label className="block text-xs text-slate-400 mb-1">පාඩමේ මාතෘකාව *</label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="උදා: සෛල විද්‍යාව - විශේෂ ප්‍රශ්න පත්‍ර සාකච්ඡාව"
-                            value={schedTitle}
-                            onChange={(e) => setSchedTitle(e.target.value)}
-                            className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-purple-500"
-                          />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-xs text-slate-400 mb-1">දිනය</label>
-                            <input
-                              type="date"
-                              required
-                              value={schedDate}
-                              onChange={(e) => setSchedDate(e.target.value)}
-                              className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs text-slate-400 mb-1">වේලාව</label>
-                            <input
-                              type="time"
-                              required
-                              value={schedTime}
-                              onChange={(e) => setSchedTime(e.target.value)}
-                              className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
-                            />
-                          </div>
-                        </div>
-
-                        <button
-                          type="submit"
-                          disabled={savingLiveClass}
-                          className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold py-3 rounded-xl text-xs transition shadow-lg shadow-purple-600/30 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
-                        >
-                          {savingLiveClass ? 'Zoom Meeting එක සෑදෙමින් පවතී...' : '⚡ Zoom Class එක Auto සාදා Publish කරන්න'}
-                        </button>
-                      </form>
-                    </div>
-
-                    {/* YouTube Recordings Section */}
-                    <div className="bg-[#0c1322] border border-slate-800/80 rounded-2xl p-6 shadow-xl space-y-5">
-                      <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-                        <div className="flex items-center gap-2">
-                          <Film className="w-5 h-5 text-red-500" />
-                          <h3 className="font-bold text-base">Class Recordings ({courseRecordings.length})</h3>
-                        </div>
-                        <span className="px-2.5 py-0.5 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 text-[10px] font-bold flex items-center gap-1">
-                          <Youtube className="w-3 h-3" /> YouTube Package Data
-                        </span>
-                      </div>
-
-                      {/* Add YouTube Recording Form */}
-                      <form onSubmit={handleAddRecording} className="space-y-3 bg-[#131c31] p-4 rounded-xl border border-slate-800">
-                        <div className="flex items-center justify-between">
-                          <h4 className="text-xs font-bold text-slate-200">➕ YouTube Recording එකක් එක් කරන්න</h4>
-                          <span className="text-[10px] text-slate-400">Unlisted Videos Only</span>
-                        </div>
-
-                        <div>
-                          <label className="block text-[11px] text-slate-400 mb-1">පාඩමේ නම / මාතෘකාව *</label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="උදා: පාඩම 02: සම්පූර්ණ විවරණය"
-                            value={recTitle}
-                            onChange={(e) => setRecTitle(e.target.value)}
-                            className="w-full bg-[#0c1322] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-red-500"
-                          />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-[11px] text-slate-400 mb-1">පැවැත්වූ දිනය</label>
-                            <input
-                              type="date"
-                              required
-                              value={recDate}
-                              onChange={(e) => setRecDate(e.target.value)}
-                              className="w-full bg-[#0c1322] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-red-500"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[11px] text-slate-400 mb-1">කාලය (Duration)</label>
-                            <input
-                              type="text"
-                              placeholder="2h 15m"
-                              value={recDuration}
-                              onChange={(e) => setRecDuration(e.target.value)}
-                              className="w-full bg-[#0c1322] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-red-500"
-                            />
-                          </div>
-                        </div>
-
-                        <div>
-                          <label className="block text-[11px] text-slate-400 mb-1">YouTube Unlisted Link එක (හෝ Video ID) *</label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="https://youtu.be/xxxxxx හෝ https://www.youtube.com/watch?v=xxxxxx"
-                            value={recYoutubeUrl}
-                            onChange={(e) => setRecYoutubeUrl(e.target.value)}
-                            className="w-full bg-[#0c1322] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-red-300 font-mono focus:outline-none focus:border-red-500"
-                          />
-                          <p className="text-[10px] text-slate-500 mt-1">
-                            💡 YouTube හි Privacy එක <strong>Unlisted</strong> ලෙස සකසා ලින්ක් එක මෙහි Paste කරන්න.
-                          </p>
-                        </div>
-
-                        <button
-                          type="submit"
-                          disabled={savingRecording}
-                          className="w-full bg-red-600 hover:bg-red-500 text-white font-semibold py-2.5 rounded-xl text-xs transition shadow-lg shadow-red-600/20 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5"
-                        >
-                          <Youtube className="w-3.5 h-3.5" />
-                          <span>{savingRecording ? 'එක්වෙමින් පවතී...' : '+ Recording එක Playlist එකට එක් කරන්න'}</span>
-                        </button>
-                      </form>
-
-                      {/* Recordings List */}
-                      <div className="space-y-2.5 max-h-[340px] overflow-y-auto pr-1">
-                        {courseRecordings.length === 0 ? (
-                          <div className="p-8 rounded-xl bg-slate-900/30 border border-dashed border-slate-800 text-center space-y-1">
-                            <Film className="w-7 h-7 text-slate-600 mx-auto" />
-                            <div className="text-xs font-semibold text-slate-400">මෙම පන්තියට තවම Recordings නොමැත.</div>
-                            <p className="text-[10px] text-slate-500">YouTube Unlisted Link එක දමා Playlist එකට එක් කරන්න.</p>
-                          </div>
-                        ) : (
-                          courseRecordings.map((rec) => (
-                            <div key={rec.id} className="p-3.5 rounded-xl bg-[#131c31] border border-slate-800 hover:border-slate-700 transition flex items-center justify-between group">
-                              <div className="space-y-1 pr-3">
-                                <div className="flex items-center gap-2">
-                                  <PlayCircle className="w-4 h-4 text-red-400 shrink-0" />
-                                  <h5 className="text-xs font-semibold text-white line-clamp-1 group-hover:text-red-300 transition">{rec.title}</h5>
+                          {courseLiveClass ? (
+                            <div className="p-5 rounded-xl bg-[#131c31] border border-purple-500/30 space-y-3">
+                              <div className="flex items-start justify-between">
+                                <div>
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400">වත්මන් සජීවී කාලසටහන</span>
+                                  <h4 className="text-base font-bold text-white mt-0.5">{courseLiveClass.title}</h4>
                                 </div>
-                                <div className="flex items-center gap-3 text-[10px] text-slate-400 pl-6">
-                                  <span>📅 {rec.lesson_date}</span>
-                                  <span>⏱️ {rec.duration || '2h 30m'}</span>
-                                  <span className="font-mono text-red-400">YT: {rec.video_id}</span>
-                                </div>
+                                <button
+                                  onClick={() => handleDeleteLiveClass(courseLiveClass.id)}
+                                  className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition cursor-pointer"
+                                  title="Schedule එක ඉවත් කරන්න"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
                               </div>
-                              <button
-                                onClick={() => handleDeleteRecording(rec.id)}
-                                className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition cursor-pointer shrink-0"
-                                title="Recording එක මකන්න"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              <div className="flex flex-wrap gap-4 text-xs text-slate-300">
+                                <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-purple-400" /> {courseLiveClass.date}</span>
+                                <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-purple-400" /> {courseLiveClass.time}</span>
+                              </div>
+                              <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-xs">
+                                <span className="text-slate-400 flex items-center gap-1 text-[11px]">
+                                  🛡️ <strong className="text-emerald-400">Anti-Leak Gateway:</strong> Link එක ආරක්ෂිතයි
+                                </span>
+                                <a
+                                  href={courseLiveClass.zoom_join_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-purple-400 hover:underline inline-flex items-center gap-1 text-[11px]"
+                                >
+                                  <ExternalLink className="w-3 h-3" />
+                                  <span>පරීක්ෂා කරන්න (Test)</span>
+                                </a>
+                              </div>
                             </div>
-                          ))
-                        )}
-                      </div>
+                          ) : (
+                            <div className="p-4 rounded-xl bg-slate-900/50 border border-dashed border-slate-800 text-center text-xs text-slate-500">
+                              මෙම පන්තියට තවමත් සජීවී Zoom Link එකක් Schedule කර නොමැත.
+                            </div>
+                          )}
 
-                      <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500">
-                        <span>🛡️ Floating Dynamic Watermark & Anti-Click Shield Enabled</span>
-                        <span>{courseRecordings.length} Recordings</span>
-                      </div>
-                    </div>
+                          <form onSubmit={handleSaveLiveClass} className="space-y-4 pt-2">
+                            <div className="flex items-center justify-between">
+                              <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                                {courseLiveClass ? 'අලුත් Zoom පන්තියක් Schedule කිරීම (Update)' : 'නව Zoom පන්තියක් Schedule කරන්න'}
+                              </h4>
+                              <span className="text-[10px] text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/20 font-semibold flex items-center gap-1">
+                                <Sparkles className="w-3 h-3" /> Auto-Generated
+                              </span>
+                            </div>
 
-                  </div>
+                            <div>
+                              <label className="block text-xs text-slate-400 mb-1">පාඩමේ මාතෘකාව *</label>
+                              <input
+                                type="text"
+                                required
+                                placeholder="උදා: සෛල විද්‍යාව - විශේෂ ප්‍රශ්න පත්‍ර සාකච්ඡාව"
+                                value={schedTitle}
+                                onChange={(e) => setSchedTitle(e.target.value)}
+                                className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-purple-500"
+                              />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <label className="block text-xs text-slate-400 mb-1">දිනය</label>
+                                <input
+                                  type="date"
+                                  required
+                                  value={schedDate}
+                                  onChange={(e) => setSchedDate(e.target.value)}
+                                  className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs text-slate-400 mb-1">වේලාව</label>
+                                <input
+                                  type="time"
+                                  required
+                                  value={schedTime}
+                                  onChange={(e) => setSchedTime(e.target.value)}
+                                  className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
+                                />
+                              </div>
+                            </div>
+
+                            <button
+                              type="submit"
+                              disabled={savingLiveClass}
+                              className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold py-3 rounded-xl text-xs transition shadow-lg shadow-purple-600/30 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+                            >
+                              {savingLiveClass ? 'Zoom Meeting එක සෑදෙමින් පවතී...' : '⚡ Zoom Class එක Auto සාදා Publish කරන්න'}
+                            </button>
+                          </form>
+                        </div>
+
+                        {/* YouTube Recordings Section */}
+                        <div className="bg-[#0c1322] border border-slate-800/80 rounded-2xl p-6 shadow-xl space-y-5">
+                          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                            <div className="flex items-center gap-2">
+                              <Film className="w-5 h-5 text-red-500" />
+                              <h3 className="font-bold text-base">Class Recordings ({courseRecordings.length})</h3>
+                            </div>
+                            <span className="px-2.5 py-0.5 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 text-[10px] font-bold flex items-center gap-1">
+                              <Youtube className="w-3 h-3" /> YouTube Package Data
+                            </span>
+                          </div>
+
+                          {/* Add YouTube Recording Form */}
+                          <form onSubmit={handleAddRecording} className="space-y-3 bg-[#131c31] p-4 rounded-xl border border-slate-800">
+                            <div className="flex items-center justify-between">
+                              <h4 className="text-xs font-bold text-slate-200">➕ YouTube Recording එකක් එක් කරන්න</h4>
+                              <span className="text-[10px] text-slate-400">Unlisted Videos Only</span>
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] text-slate-400 mb-1">පාඩමේ නම / මාතෘකාව *</label>
+                              <input
+                                type="text"
+                                required
+                                placeholder="උදා: පාඩම 02: සම්පූර්ණ විවරණය"
+                                value={recTitle}
+                                onChange={(e) => setRecTitle(e.target.value)}
+                                className="w-full bg-[#0c1322] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-red-500"
+                              />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3">
+                              <div>
+                                <label className="block text-[11px] text-slate-400 mb-1">පැවැත්වූ දිනය</label>
+                                <input
+                                  type="date"
+                                  required
+                                  value={recDate}
+                                  onChange={(e) => setRecDate(e.target.value)}
+                                  className="w-full bg-[#0c1322] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-red-500"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[11px] text-slate-400 mb-1">කාලය (Duration)</label>
+                                <input
+                                  type="text"
+                                  placeholder="2h 15m"
+                                  value={recDuration}
+                                  onChange={(e) => setRecDuration(e.target.value)}
+                                  className="w-full bg-[#0c1322] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-red-500"
+                                />
+                              </div>
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] text-slate-400 mb-1">YouTube Unlisted Link එක (හෝ Video ID) *</label>
+                              <input
+                                type="text"
+                                required
+                                placeholder="https://youtu.be/xxxxxx හෝ https://www.youtube.com/watch?v=xxxxxx"
+                                value={recYoutubeUrl}
+                                onChange={(e) => setRecYoutubeUrl(e.target.value)}
+                                className="w-full bg-[#0c1322] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-red-300 font-mono focus:outline-none focus:border-red-500"
+                              />
+                            </div>
+
+                            <button
+                              type="submit"
+                              disabled={savingRecording}
+                              className="w-full bg-red-600 hover:bg-red-500 text-white font-semibold py-2.5 rounded-xl text-xs transition shadow-lg shadow-red-600/20 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5"
+                            >
+                              <Youtube className="w-3.5 h-3.5" />
+                              <span>{savingRecording ? 'එක්වෙමින් පවතී...' : '+ Recording එක Playlist එකට එක් කරන්න'}</span>
+                            </button>
+                          </form>
+
+                          {/* Recordings List */}
+                          <div className="space-y-2.5 max-h-[320px] overflow-y-auto pr-1">
+                            {courseRecordings.length === 0 ? (
+                              <div className="p-8 rounded-xl bg-slate-900/30 border border-dashed border-slate-800 text-center space-y-1">
+                                <Film className="w-7 h-7 text-slate-600 mx-auto" />
+                                <div className="text-xs font-semibold text-slate-400">මෙම පන්තියට තවම Recordings නොමැත.</div>
+                                <p className="text-[10px] text-slate-500">YouTube Unlisted Link එක දමා Playlist එකට එක් කරන්න.</p>
+                              </div>
+                            ) : (
+                              courseRecordings.map((rec) => (
+                                <div key={rec.id} className="p-3.5 rounded-xl bg-[#131c31] border border-slate-800 hover:border-slate-700 transition flex items-center justify-between group">
+                                  <div className="space-y-1 pr-3">
+                                    <div className="flex items-center gap-2">
+                                      <PlayCircle className="w-4 h-4 text-red-400 shrink-0" />
+                                      <h5 className="text-xs font-semibold text-white line-clamp-1 group-hover:text-red-300 transition">{rec.title}</h5>
+                                    </div>
+                                    <div className="flex items-center gap-3 text-[10px] text-slate-400 pl-6">
+                                      <span>📅 {rec.lesson_date}</span>
+                                      <span>⏱️ {rec.duration || '2h 30m'}</span>
+                                      <span className="font-mono text-red-400">YT: {rec.video_id}</span>
+                                    </div>
+                                  </div>
+                                  <button
+                                    onClick={() => handleDeleteRecording(rec.id)}
+                                    className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition cursor-pointer shrink-0"
+                                    title="Recording එක මකන්න"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </div>
+
+                      </div>
+                    )}
+
+                    {/* SECTION 2: TUTES & STUDY MATERIALS */}
+                    {courseSectionTab === 'materials' && (
+                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                        
+                        {/* Upload Tute Form */}
+                        <div className="lg:col-span-5 bg-[#0c1322] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
+                          <div className="flex items-center gap-2 pb-3 border-b border-slate-800">
+                            <UploadCloud className="w-5 h-5 text-emerald-400" />
+                            <h3 className="font-bold text-base">අලුත් ටියූට් / සටහනක් Upload කරන්න</h3>
+                          </div>
+
+                          <form onSubmit={handleAddMaterial} className="space-y-4">
+                            <div>
+                              <label className="block text-xs text-slate-400 mb-1">නිබන්ධනයේ නම / මාතෘකාව *</label>
+                              <input
+                                type="text"
+                                required
+                                placeholder="උදා: සෛල විද්‍යාව - සිද්ධාන්ත නිබන්ධනය 01"
+                                value={matTitle}
+                                onChange={(e) => setMatTitle(e.target.value)}
+                                className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-xs text-slate-400 mb-1">කෙටි විස්තරය (Description)</label>
+                              <textarea
+                                rows={2}
+                                placeholder="උදා: පන්තියට සහභාගී වීමට පෙර මෙම නිබන්ධනය කියවා සටහන් කරගන්න."
+                                value={matDesc}
+                                onChange={(e) => setMatDesc(e.target.value)}
+                                className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 resize-none"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-xs text-slate-400 mb-1">PDF හෝ Document ගොනුව *</label>
+                              <input
+                                type="file"
+                                required
+                                accept=".pdf,.doc,.docx"
+                                onChange={(e) => setMatFile(e.target.files?.[0] || null)}
+                                className="w-full text-xs text-slate-300 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-emerald-600/20 file:text-emerald-400 hover:file:bg-emerald-600/30 cursor-pointer bg-[#131c31] border border-slate-700 rounded-xl p-2"
+                              />
+                              <p className="text-[10px] text-slate-500 mt-1">PDF, Word ලේඛන පමණක් තෝරන්න.</p>
+                            </div>
+
+                            <button
+                              type="submit"
+                              disabled={savingMaterial}
+                              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl text-xs transition shadow-lg shadow-emerald-600/20 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
+                            >
+                              <UploadCloud className="w-4 h-4" />
+                              <span>{savingMaterial ? 'ගොනුව Upload වෙමින් පවතී...' : '+ මෙම ටියූට් එක පන්තියට එක් කරන්න'}</span>
+                            </button>
+                          </form>
+                        </div>
+
+                        {/* Tutes List */}
+                        <div className="lg:col-span-7 bg-[#0c1322] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+                          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                            <h3 className="font-bold text-base flex items-center gap-2">
+                              <FileText className="w-4 h-4 text-emerald-400" />
+                              <span>පවතින නිබන්ධන ({courseMaterials.length})</span>
+                            </h3>
+                            <span className="text-[11px] text-slate-400">PDF Study Materials</span>
+                          </div>
+
+                          {courseMaterials.length === 0 ? (
+                            <div className="p-12 rounded-xl bg-slate-900/30 border border-dashed border-slate-800 text-center space-y-2">
+                              <File className="w-8 h-8 text-slate-600 mx-auto" />
+                              <div className="text-xs font-semibold text-slate-400">මෙම පන්තියට තවමත් ටියූට් එකතු කර නොමැත.</div>
+                              <p className="text-[11px] text-slate-500">වම්පස ඇති Form එකෙන් පන්තියේ පළමු නිබන්ධනය Upload කරන්න.</p>
+                            </div>
+                          ) : (
+                            <div className="space-y-3">
+                              {courseMaterials.map((mat) => (
+                                <div key={mat.id} className="p-4 rounded-xl bg-[#131c31] border border-slate-800 hover:border-slate-700 transition flex items-center justify-between group">
+                                  <div className="space-y-1 pr-4">
+                                    <div className="flex items-center gap-2">
+                                      <FileText className="w-4 h-4 text-emerald-400 shrink-0" />
+                                      <h5 className="text-xs font-bold text-white group-hover:text-emerald-300 transition">{mat.title}</h5>
+                                    </div>
+                                    {mat.description && (
+                                      <p className="text-[11px] text-slate-400 line-clamp-1 pl-6">{mat.description}</p>
+                                    )}
+                                    <div className="flex items-center gap-3 text-[10px] text-slate-500 pl-6">
+                                      <span>📄 {mat.file_name}</span>
+                                      <span>📦 {mat.file_size}</span>
+                                      <span>📅 {new Date(mat.created_at).toLocaleDateString('si-LK')}</span>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    <a
+                                      href={mat.file_url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="p-2 rounded-lg bg-emerald-600/10 text-emerald-400 hover:bg-emerald-600 hover:text-white transition"
+                                      title="Open / Download"
+                                    >
+                                      <Download className="w-4 h-4" />
+                                    </a>
+                                    <button
+                                      onClick={() => handleDeleteMaterial(mat.id)}
+                                      className="p-2 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition cursor-pointer"
+                                      title="Delete"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                      </div>
+                    )}
+
+                    {/* SECTION 3: ASSIGNMENTS & DEADLINES */}
+                    {courseSectionTab === 'assignments' && (
+                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                        
+                        {/* Create Assignment Form */}
+                        <div className="lg:col-span-5 bg-[#0c1322] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
+                          <div className="flex items-center gap-2 pb-3 border-b border-slate-800">
+                            <Award className="w-5 h-5 text-amber-400" />
+                            <h3 className="font-bold text-base">නව Assignment එකක් සාදන්න</h3>
+                          </div>
+
+                          <form onSubmit={handleAddAssignment} className="space-y-4">
+                            <div>
+                              <label className="block text-xs text-slate-400 mb-1">පැවරුමේ මාතෘකාව *</label>
+                              <input
+                                type="text"
+                                required
+                                placeholder="උදා: සෛල විද්‍යාව - පළමු සතියේ පැවරුම"
+                                value={assignTitle}
+                                onChange={(e) => setAssignTitle(e.target.value)}
+                                className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-xs text-slate-400 mb-1">උපදෙස් (Instructions)</label>
+                              <textarea
+                                rows={2}
+                                placeholder="උදා: සියලුම ප්‍රශ්න වලට පිළිතුරු සපයා A4 කොළ වල ලියා ඡායාරූප PDF එකක් ලෙස Submit කරන්න."
+                                value={assignDesc}
+                                onChange={(e) => setAssignDesc(e.target.value)}
+                                className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-amber-500 resize-none"
+                              />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3">
+                              <div>
+                                <label className="block text-xs text-amber-400 mb-1 font-semibold">අවසන් දිනය (Deadline Date) *</label>
+                                <input
+                                  type="date"
+                                  required
+                                  value={assignDueDate}
+                                  onChange={(e) => setAssignDueDate(e.target.value)}
+                                  className="w-full bg-[#131c31] border border-amber-500/40 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs text-amber-400 mb-1 font-semibold">අවසන් වේලාව (Time) *</label>
+                                <input
+                                  type="time"
+                                  required
+                                  value={assignDueTime}
+                                  onChange={(e) => setAssignDueTime(e.target.value)}
+                                  className="w-full bg-[#131c31] border border-amber-500/40 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3">
+                              <div>
+                                <label className="block text-xs text-slate-400 mb-1">මුළු ලකුණු (Total Marks)</label>
+                                <input
+                                  type="number"
+                                  value={assignMarks}
+                                  onChange={(e) => setAssignMarks(e.target.value)}
+                                  className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs text-slate-400 mb-1">ප්‍රශ්න පත්‍රය (Paper PDF)</label>
+                                <input
+                                  type="file"
+                                  accept=".pdf"
+                                  onChange={(e) => setAssignFile(e.target.files?.[0] || null)}
+                                  className="w-full text-[11px] text-slate-300 file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-[10px] file:font-semibold file:bg-amber-600/20 file:text-amber-400 cursor-pointer bg-[#131c31] border border-slate-700 rounded-xl p-1.5"
+                                />
+                              </div>
+                            </div>
+
+                            <button
+                              type="submit"
+                              disabled={savingAssignment}
+                              className="w-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-bold py-3 rounded-xl text-xs transition shadow-lg shadow-amber-600/20 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
+                            >
+                              <Award className="w-4 h-4" />
+                              <span>{savingAssignment ? 'Assignment එක සකස් වෙමින් පවතී...' : '+ Deadline සහිතව Publish කරන්න'}</span>
+                            </button>
+                          </form>
+                        </div>
+
+                        {/* Assignments List */}
+                        <div className="lg:col-span-7 bg-[#0c1322] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+                          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                            <h3 className="font-bold text-base flex items-center gap-2">
+                              <Award className="w-4 h-4 text-amber-400" />
+                              <span>ක්‍රියාකාරී Assignments ({courseAssignments.length})</span>
+                            </h3>
+                            <span className="text-[11px] text-slate-400">Deadlines & Submissions</span>
+                          </div>
+
+                          {courseAssignments.length === 0 ? (
+                            <div className="p-12 rounded-xl bg-slate-900/30 border border-dashed border-slate-800 text-center space-y-2">
+                              <Award className="w-8 h-8 text-slate-600 mx-auto" />
+                              <div className="text-xs font-semibold text-slate-400">මෙම පන්තියට තවමත් Assignments ලබාදී නොමැත.</div>
+                              <p className="text-[11px] text-slate-500">වම්පස ඇති Form එකෙන් පළමු පැවරුම සකස් කරන්න.</p>
+                            </div>
+                          ) : (
+                            <div className="space-y-3">
+                              {courseAssignments.map((a) => {
+                                const isExpired = new Date(a.due_date) < new Date();
+                                const formattedDeadline = new Date(a.due_date).toLocaleString('si-LK', {
+                                  year: 'numeric',
+                                  month: 'short',
+                                  day: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                });
+
+                                return (
+                                  <div key={a.id} className="p-4 rounded-xl bg-[#131c31] border border-slate-800 hover:border-slate-700 transition flex items-center justify-between group">
+                                    <div className="space-y-1.5 pr-4">
+                                      <div className="flex items-center gap-2">
+                                        <h5 className="text-xs font-bold text-white group-hover:text-amber-300 transition">{a.title}</h5>
+                                        <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
+                                          isExpired ? 'bg-red-500/20 text-red-400' : 'bg-emerald-500/20 text-emerald-400'
+                                        }`}>
+                                          {isExpired ? 'Closed (Expired)' : 'Open (Active)'}
+                                        </span>
+                                      </div>
+
+                                      {a.description && (
+                                        <p className="text-[11px] text-slate-400 line-clamp-1">{a.description}</p>
+                                      )}
+
+                                      <div className="flex flex-wrap items-center gap-4 text-[10px] text-slate-400 pt-1">
+                                        <span className="flex items-center gap-1 font-semibold text-amber-300">
+                                          <Clock className="w-3 h-3 text-amber-400" /> Deadline: {formattedDeadline}
+                                        </span>
+                                        <span>🎯 Marks: {a.total_marks}</span>
+                                        {a.file_url && (
+                                          <a href={a.file_url} target="_blank" rel="noreferrer" className="text-blue-400 hover:underline flex items-center gap-1">
+                                            <Download className="w-3 h-3" /> ප්‍රශ්න පත්‍රය
+                                          </a>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    <button
+                                      onClick={() => handleDeleteAssignment(a.id)}
+                                      className="p-2 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition cursor-pointer shrink-0"
+                                      title="Assignment එක මකන්න"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+
+                      </div>
+                    )}
+                  </>
                 )}
+
               </div>
             ) : (
               /* Overview of All Courses */
