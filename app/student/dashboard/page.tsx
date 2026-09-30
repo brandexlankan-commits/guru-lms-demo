@@ -36,7 +36,6 @@ export default function StudentDashboard() {
   useEffect(() => {
     fetchStudentData();
 
-    // Floating watermark movement interval (Moves every 8 seconds)
     const interval = setInterval(() => {
       const randomTop = Math.floor(15 + Math.random() * 65) + '%';
       const randomLeft = Math.floor(10 + Math.random() * 60) + '%';
@@ -52,7 +51,6 @@ export default function StudentDashboard() {
       if (!user) return;
       setCurrentUser(user);
 
-      // 1. Fetch enrolled courses
       const { data: enrollments } = await supabase
         .from('course_enrollments')
         .select('*, courses(*)')
@@ -143,7 +141,6 @@ export default function StudentDashboard() {
     loadCourseContent(course.id);
   };
 
-  // Student Assignment Upload Handler
   const handleSubmitAssignment = async (assignmentId: string) => {
     if (!submissionFile || !currentUser) {
       alert('කරුණාකර ඔබේ පිළිතුරු පත්‍රයේ PDF හෝ Image ගොනුවක් තෝරන්න.');
@@ -155,7 +152,6 @@ export default function StudentDashboard() {
       const fileExt = submissionFile.name.split('.').pop();
       const storagePath = `submissions/${assignmentId}_${currentUser.id}_${Date.now()}.${fileExt}`;
 
-      // Upload file to Supabase storage
       const { error: uploadErr } = await supabase.storage
         .from('lms-materials')
         .upload(storagePath, submissionFile, { cacheControl: '3600', upsert: true });
@@ -166,7 +162,6 @@ export default function StudentDashboard() {
         .from('lms-materials')
         .getPublicUrl(storagePath);
 
-      // Save submission record in DB
       const { data: subData, error: dbErr } = await supabase
         .from('assignment_submissions')
         .upsert([
@@ -198,15 +193,17 @@ export default function StudentDashboard() {
 
   return (
     <div className="min-h-screen bg-[#070b14] text-white p-4 md:p-8 font-sans select-none">
-      {/* Top Header */}
+      {/* Top Header with Brand Logo */}
       <header className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-6 border-b border-slate-800 max-w-7xl mx-auto">
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center text-purple-400 font-bold text-lg">
-            🎓
+        <div className="flex items-center gap-3.5">
+          <div className="w-12 h-12 rounded-2xl bg-white/5 border border-purple-500/30 flex items-center justify-center p-1.5 shadow-xl shadow-purple-500/10 overflow-hidden backdrop-blur-md">
+            <img src="/logo.png" alt="Learn ICT with Mano" className="w-full h-full object-contain" />
           </div>
           <div>
-            <h1 className="text-lg font-bold">ශිෂ්‍ය Dashboard (Student Portal)</h1>
-            <p className="text-xs text-slate-400">ආයුබෝවන්, <span className="text-purple-300 font-mono">@{username}</span></p>
+            <h1 className="text-lg font-black tracking-tight text-white flex items-center gap-2">
+              Learn ICT with Mano
+            </h1>
+            <p className="text-xs text-slate-400">Student Portal • ආයුබෝවන්, <span className="text-purple-300 font-mono">@{username}</span></p>
           </div>
         </div>
 
@@ -228,7 +225,7 @@ export default function StudentDashboard() {
         </div>
       </header>
 
-      {/* Main Content */}
+      {/* Main Content Area */}
       <main className="max-w-7xl mx-auto mt-6 space-y-6">
         
         {/* Course Info Banner */}
@@ -256,7 +253,7 @@ export default function StudentDashboard() {
           </div>
         )}
 
-        {/* MAIN NAVIGATION TABS FOR STUDENT */}
+        {/* Navigation Tabs */}
         <div className="flex items-center gap-2 bg-[#0c1322] p-1.5 rounded-2xl border border-slate-800 w-fit">
           <button
             onClick={() => setActiveTab('videos')}
@@ -295,12 +292,9 @@ export default function StudentDashboard() {
           </button>
         </div>
 
-        {/* ============================================================== */}
         {/* TAB 1: VIDEOS & LIVE CLASS */}
-        {/* ============================================================== */}
         {activeTab === 'videos' && (
           <div className="space-y-6">
-            {/* Live Zoom Class Alert Card */}
             {liveClass ? (
               <div className="bg-gradient-to-r from-purple-950/40 via-[#0c1322] to-[#131c31] border border-purple-500/40 rounded-2xl p-5 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
@@ -334,10 +328,8 @@ export default function StudentDashboard() {
               </div>
             )}
 
-            {/* Video Player & Recordings Hub */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-              
-              {/* Protected YouTube Player */}
+              {/* YouTube Protected Player */}
               <div className="lg:col-span-8 bg-[#0c1322] border border-slate-800/80 rounded-2xl p-5 shadow-2xl space-y-4">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                   <div className="flex items-center gap-2">
@@ -349,7 +341,6 @@ export default function StudentDashboard() {
                   </span>
                 </div>
 
-                {/* SECURE VIDEO SCREEN CONTAINER */}
                 <div 
                   className="relative aspect-video w-full rounded-2xl bg-black border border-slate-800 overflow-hidden shadow-2xl"
                   onContextMenu={(e) => e.preventDefault()}
@@ -364,19 +355,17 @@ export default function StudentDashboard() {
                         className="w-full h-full border-0"
                       />
 
-                      {/* ANTI-CLICK SHIELD 1: TOP HEADER OVERLAY */}
+                      {/* Anti-Click Shields */}
                       <div 
                         className="absolute top-0 left-0 right-0 h-14 z-20 bg-transparent cursor-default" 
                         onClick={(e) => e.stopPropagation()}
                       />
-
-                      {/* ANTI-CLICK SHIELD 2: BOTTOM RIGHT OVERLAY */}
                       <div 
                         className="absolute bottom-0 right-0 w-24 h-12 z-20 bg-transparent cursor-default"
                         onClick={(e) => e.stopPropagation()}
                       />
 
-                      {/* DYNAMIC FLOATING WATERMARK */}
+                      {/* Floating Watermark */}
                       <div 
                         className="absolute z-30 pointer-events-none transition-all duration-1000 ease-in-out px-3 py-1.5 rounded-lg bg-black/40 backdrop-blur-xs border border-white/10"
                         style={{ top: watermarkPos.top, left: watermarkPos.left }}
@@ -399,7 +388,7 @@ export default function StudentDashboard() {
                     <h4 className="text-sm font-bold text-white">{activeRecording.title}</h4>
                     <div className="flex items-center gap-4 text-xs text-slate-400 mt-1">
                       <span>📅 පැවැත්වූ දිනය: {activeRecording.lesson_date}</span>
-                      <span>⏱️ කාලය: {activeRecording.duration || '2h 30m'}</span>
+                      <span>⏱️ කාලය: {activeRecording.duration || '2h 00m'}</span>
                     </div>
                   </div>
                 )}
@@ -431,7 +420,7 @@ export default function StudentDashboard() {
                           <h5 className="text-xs font-semibold line-clamp-1">{rec.title}</h5>
                           <div className="flex items-center gap-3 text-[10px] text-slate-400 mt-0.5">
                             <span>📅 {rec.lesson_date}</span>
-                            <span>⏱️ {rec.duration || '2h 30m'}</span>
+                            <span>⏱️ {rec.duration || '2h 00m'}</span>
                           </div>
                         </div>
                       </button>
@@ -444,9 +433,7 @@ export default function StudentDashboard() {
           </div>
         )}
 
-        {/* ============================================================== */}
         {/* TAB 2: TUTES & STUDY MATERIALS */}
-        {/* ============================================================== */}
         {activeTab === 'materials' && (
           <div className="bg-[#0c1322] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
             <div className="flex items-center justify-between pb-4 border-b border-slate-800">
@@ -504,9 +491,7 @@ export default function StudentDashboard() {
           </div>
         )}
 
-        {/* ============================================================== */}
         {/* TAB 3: ASSIGNMENTS & DEADLINES */}
-        {/* ============================================================== */}
         {activeTab === 'assignments' && (
           <div className="bg-[#0c1322] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
             <div className="flex items-center justify-between pb-4 border-b border-slate-800">
@@ -544,7 +529,6 @@ export default function StudentDashboard() {
                   return (
                     <div key={assign.id} className="p-5 rounded-2xl bg-[#131c31] border border-slate-800 hover:border-slate-700 transition space-y-4">
                       
-                      {/* Top Header of Card */}
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                         <div className="space-y-1">
                           <div className="flex items-center gap-2">
@@ -571,7 +555,6 @@ export default function StudentDashboard() {
                         </div>
                       </div>
 
-                      {/* Deadline & Question Paper Links */}
                       <div className="flex flex-wrap items-center justify-between gap-3 text-xs bg-[#0c1322] p-3 rounded-xl border border-slate-800/80">
                         <span className="flex items-center gap-1.5 font-semibold text-amber-300">
                           <Clock className="w-4 h-4 text-amber-400" />

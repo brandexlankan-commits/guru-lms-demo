@@ -7,7 +7,7 @@ import {
   Calendar, Clock, Film, PlayCircle,
   CheckCircle, AlertCircle, X, Shield, RefreshCw, Smartphone,
   Search, Unlock, Lock, PhoneCall, CreditCard, Eye, Check, ExternalLink, Sparkles,
-  FileText, UploadCloud, File, Award, AlertTriangle, Download
+  FileText, UploadCloud, File, Award, Download
 } from 'lucide-react';
 
 // Custom YouTube SVG Icon
@@ -19,8 +19,6 @@ const Youtube = ({ className = "w-4 h-4" }: { className?: string }) => (
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<'courses' | 'students' | 'devices' | 'slips'>('courses');
-
-  // Sub-tabs inside Students Tab
   const [studentSubTab, setStudentSubTab] = useState<'register' | 'list'>('register');
 
   // Courses state
@@ -41,7 +39,7 @@ export default function AdminDashboard() {
   // Add Course Modal State
   const [showAddCourseModal, setShowAddCourseModal] = useState(false);
   const [newCourseTitle, setNewCourseTitle] = useState('');
-  const [newCourseCategory, setNewCourseCategory] = useState('Grade 7 Science');
+  const [newCourseCategory, setNewCourseCategory] = useState('Grade 7 ICT');
   const [newCourseType, setNewCourseType] = useState('Theory');
   const [newCourseFee, setNewCourseFee] = useState('1500');
   const [creatingCourse, setCreatingCourse] = useState(false);
@@ -55,7 +53,7 @@ export default function AdminDashboard() {
   // YouTube Recordings form states
   const [recTitle, setRecTitle] = useState('');
   const [recDate, setRecDate] = useState('');
-  const [recDuration, setRecDuration] = useState('2h 30m');
+  const [recDuration, setRecDuration] = useState('2h 00m');
   const [recYoutubeUrl, setRecYoutubeUrl] = useState('');
   const [savingRecording, setSavingRecording] = useState(false);
 
@@ -398,20 +396,18 @@ export default function AdminDashboard() {
     }
   };
 
-  // Helper to extract YouTube Video ID
   const extractYouTubeId = (url: string) => {
     const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
     return match ? match[1] : url.trim();
   };
 
-  // Add YouTube Recording
   const handleAddRecording = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCourseForManage) return;
 
     const parsedVideoId = extractYouTubeId(recYoutubeUrl);
     if (!parsedVideoId || parsedVideoId.length !== 11) {
-      alert('වලංගු YouTube Link එකක් ඇතුළත් කරන්න (උදා: https://youtu.be/... හෝ https://www.youtube.com/watch?v=...)');
+      alert('වලංගු YouTube Link එකක් ඇතුළත් කරන්න.');
       return;
     }
 
@@ -444,7 +440,7 @@ export default function AdminDashboard() {
   };
 
   const handleDeleteRecording = async (recId: string) => {
-    if (!confirm('මෙම Recording එක Playlist එකෙන් ඉවත් කිරීමට අවශ්‍යද?')) return;
+    if (!confirm('මෙම Recording එක ඉවත් කිරීමට අවශ්‍යද?')) return;
     try {
       const res = await fetch('/api/manage-courses', {
         method: 'POST',
@@ -460,9 +456,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // Upload File directly to Supabase Storage Helper
   const uploadToStorage = async (file: File, folder: string) => {
-    const fileExt = file.name.split('.').pop();
     const cleanFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
     const storagePath = `${folder}/${Date.now()}_${cleanFileName}`;
 
@@ -483,11 +477,10 @@ export default function AdminDashboard() {
     };
   };
 
-  // Add Tute / Study Material
   const handleAddMaterial = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCourseForManage || !matFile) {
-      alert('කරුණාකර PDF හෝ Study Material ගොනුවක් තෝරන්න.');
+      alert('කරුණාකර PDF හෝ Document ගොනුවක් තෝරන්න.');
       return;
     }
 
@@ -518,7 +511,7 @@ export default function AdminDashboard() {
       setMatDesc('');
       setMatFile(null);
     } catch (err: any) {
-      alert('ගොනුව එක් කිරීම අසාර්ථක විය: ' + err.message);
+      alert('දෝෂයකි: ' + err.message);
     } finally {
       setSavingMaterial(false);
     }
@@ -534,20 +527,19 @@ export default function AdminDashboard() {
       });
       if (res.ok) {
         setCourseMaterials(prev => prev.filter(m => m.id !== materialId));
-        alert('නිබන්ධනය සාර්ථකව ඉවත් කරන ලදී.');
+        alert('නිබන්ධනය ඉවත් කරන ලදී.');
       }
     } catch (e: any) {
       alert('දෝෂයකි: ' + e.message);
     }
   };
 
-  // Add Assignment with Deadline
   const handleAddAssignment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCourseForManage) return;
 
     if (!assignDueDate) {
-      alert('කරුණාකර අවසන් භාරදිය යුතු දිනය (Deadline Date) තෝරන්න.');
+      alert('කරුණාකර Deadline දිනය තෝරන්න.');
       return;
     }
 
@@ -578,7 +570,7 @@ export default function AdminDashboard() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
-      alert('පැවරුම (Assignment) සාර්ථකව සකස් කරන ලදී!');
+      alert('පැවරුම (Assignment) සාර්ථකව Publish කරන ලදී!');
       setCourseAssignments(prev => [data.assignment, ...prev]);
       setAssignTitle('');
       setAssignDesc('');
@@ -593,7 +585,7 @@ export default function AdminDashboard() {
   };
 
   const handleDeleteAssignment = async (assignmentId: string) => {
-    if (!confirm('මෙම Assignment එක සම්පූර්ණයෙන්ම ඉවත් කිරීමට අවශ්‍යද?')) return;
+    if (!confirm('මෙම Assignment එක ඉවත් කිරීමට අවශ්‍යද?')) return;
     try {
       const res = await fetch('/api/manage-courses', {
         method: 'POST',
@@ -626,7 +618,7 @@ export default function AdminDashboard() {
 
   const generateRandomPassword = () => {
     const randomDigits = Math.floor(1000 + Math.random() * 9000);
-    setPassword(`Guru#${randomDigits}`);
+    setPassword(`Mano#${randomDigits}`);
   };
 
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -750,7 +742,7 @@ export default function AdminDashboard() {
   const generateWhatsAppMessage = () => {
     if (!createdStudentData) return '';
     return `ආයුබෝවන් ${createdStudentData.fullName},
-ඔබව සාර්ථකව පන්ති පද්ධතියට (LMS) ලියාපදිංචි කරන ලදී.
+ඔබව "Learn ICT with Mano" පන්ති පද්ධතියට (LMS) සාර්ථකව ලියාපදිංචි කරන ලදී.
 
 📚 පන්ති: ${createdStudentData.selectedCoursesNames}
 🌐 Login Link: https://guru-lms-demo.vercel.app/login
@@ -785,15 +777,20 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-[#070b14] text-white p-6 md:p-10 font-sans">
-      {/* Top Header */}
+      {/* Top Header with Brand Logo */}
       <header className="flex flex-col md:flex-row items-center justify-between gap-4 pb-8 border-b border-slate-800">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center text-purple-400 font-bold text-xl shadow-lg shadow-purple-500/10">
-            🛡️
+        <div className="flex items-center gap-3.5">
+          <div className="w-13 h-13 rounded-2xl bg-white/5 border border-purple-500/30 flex items-center justify-center p-1.5 shadow-xl shadow-purple-500/10 overflow-hidden backdrop-blur-md">
+            <img src="/logo.png" alt="Learn ICT with Mano" className="w-full h-full object-contain" />
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight">Teacher Admin Portal</h1>
-            <p className="text-xs text-slate-400">A/L Guru (Teacher Control Center)</p>
+            <h1 className="text-xl font-black tracking-tight text-white flex items-center gap-2">
+              Learn ICT with Mano
+              <span className="px-2 py-0.5 rounded-full bg-purple-500/20 border border-purple-500/30 text-purple-300 text-[10px] font-bold uppercase tracking-wider">
+                Admin
+              </span>
+            </h1>
+            <p className="text-xs text-slate-400">Teacher Control Center & LMS Portal</p>
           </div>
         </div>
 
@@ -842,9 +839,7 @@ export default function AdminDashboard() {
       {/* Main Content Area */}
       <main className="mt-8 max-w-7xl mx-auto">
         
-        {/* ============================================================== */}
-        {/* TAB 1: COURSES / පන්ති */}
-        {/* ============================================================== */}
+        {/* TAB 1: COURSES */}
         {activeTab === 'courses' && (
           <div className="space-y-6">
             {selectedCourseForManage ? (
@@ -925,11 +920,10 @@ export default function AdminDashboard() {
                   <div className="p-16 text-center text-slate-400">පන්තියේ දත්ත ලබාගනිමින් පවතී...</div>
                 ) : (
                   <>
-                    {/* SECTION 1: LIVE CLASS & YOUTUBE RECORDINGS */}
+                    {/* SECTION 1: LIVE & RECORDINGS */}
                     {courseSectionTab === 'live_recordings' && (
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
-                        
-                        {/* Live Zoom Class Section */}
+                        {/* Live Class Schedule Form */}
                         <div className="bg-[#0c1322] border border-slate-800/80 rounded-2xl p-6 shadow-xl space-y-6">
                           <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                             <div className="flex items-center gap-2">
@@ -998,7 +992,7 @@ export default function AdminDashboard() {
                               <input
                                 type="text"
                                 required
-                                placeholder="උදා: සෛල විද්‍යාව - විශේෂ ප්‍රශ්න පත්‍ර සාකච්ඡාව"
+                                placeholder="උදා: Operating Systems & Practical Session"
                                 value={schedTitle}
                                 onChange={(e) => setSchedTitle(e.target.value)}
                                 className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-purple-500"
@@ -1050,7 +1044,6 @@ export default function AdminDashboard() {
                             </span>
                           </div>
 
-                          {/* Add YouTube Recording Form */}
                           <form onSubmit={handleAddRecording} className="space-y-3 bg-[#131c31] p-4 rounded-xl border border-slate-800">
                             <div className="flex items-center justify-between">
                               <h4 className="text-xs font-bold text-slate-200">➕ YouTube Recording එකක් එක් කරන්න</h4>
@@ -1062,7 +1055,7 @@ export default function AdminDashboard() {
                               <input
                                 type="text"
                                 required
-                                placeholder="උදා: පාඩම 02: සම්පූර්ණ විවරණය"
+                                placeholder="උදා: පාඩම 03: Python Functions & Lists"
                                 value={recTitle}
                                 onChange={(e) => setRecTitle(e.target.value)}
                                 className="w-full bg-[#0c1322] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-red-500"
@@ -1084,7 +1077,7 @@ export default function AdminDashboard() {
                                 <label className="block text-[11px] text-slate-400 mb-1">කාලය (Duration)</label>
                                 <input
                                   type="text"
-                                  placeholder="2h 15m"
+                                  placeholder="2h 00m"
                                   value={recDuration}
                                   onChange={(e) => setRecDuration(e.target.value)}
                                   className="w-full bg-[#0c1322] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-red-500"
@@ -1114,13 +1107,11 @@ export default function AdminDashboard() {
                             </button>
                           </form>
 
-                          {/* Recordings List */}
                           <div className="space-y-2.5 max-h-[320px] overflow-y-auto pr-1">
                             {courseRecordings.length === 0 ? (
                               <div className="p-8 rounded-xl bg-slate-900/30 border border-dashed border-slate-800 text-center space-y-1">
                                 <Film className="w-7 h-7 text-slate-600 mx-auto" />
                                 <div className="text-xs font-semibold text-slate-400">මෙම පන්තියට තවම Recordings නොමැත.</div>
-                                <p className="text-[10px] text-slate-500">YouTube Unlisted Link එක දමා Playlist එකට එක් කරන්න.</p>
                               </div>
                             ) : (
                               courseRecordings.map((rec) => (
@@ -1132,7 +1123,7 @@ export default function AdminDashboard() {
                                     </div>
                                     <div className="flex items-center gap-3 text-[10px] text-slate-400 pl-6">
                                       <span>📅 {rec.lesson_date}</span>
-                                      <span>⏱️ {rec.duration || '2h 30m'}</span>
+                                      <span>⏱️ {rec.duration || '2h 00m'}</span>
                                       <span className="font-mono text-red-400">YT: {rec.video_id}</span>
                                     </div>
                                   </div>
@@ -1155,8 +1146,6 @@ export default function AdminDashboard() {
                     {/* SECTION 2: TUTES & STUDY MATERIALS */}
                     {courseSectionTab === 'materials' && (
                       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                        
-                        {/* Upload Tute Form */}
                         <div className="lg:col-span-5 bg-[#0c1322] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
                           <div className="flex items-center gap-2 pb-3 border-b border-slate-800">
                             <UploadCloud className="w-5 h-5 text-emerald-400" />
@@ -1169,7 +1158,7 @@ export default function AdminDashboard() {
                               <input
                                 type="text"
                                 required
-                                placeholder="උදා: සෛල විද්‍යාව - සිද්ධාන්ත නිබන්ධනය 01"
+                                placeholder="උදා: Grade 7 ICT - Unit 01 Handout"
                                 value={matTitle}
                                 onChange={(e) => setMatTitle(e.target.value)}
                                 className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500"
@@ -1180,7 +1169,7 @@ export default function AdminDashboard() {
                               <label className="block text-xs text-slate-400 mb-1">කෙටි විස්තරය (Description)</label>
                               <textarea
                                 rows={2}
-                                placeholder="උදා: පන්තියට සහභාගී වීමට පෙර මෙම නිබන්ධනය කියවා සටහන් කරගන්න."
+                                placeholder="උදා: පාඩමට අදාළ සම්පූර්ණ විස්තරය මෙහි අඩංගු වේ."
                                 value={matDesc}
                                 onChange={(e) => setMatDesc(e.target.value)}
                                 className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 resize-none"
@@ -1196,7 +1185,6 @@ export default function AdminDashboard() {
                                 onChange={(e) => setMatFile(e.target.files?.[0] || null)}
                                 className="w-full text-xs text-slate-300 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-emerald-600/20 file:text-emerald-400 hover:file:bg-emerald-600/30 cursor-pointer bg-[#131c31] border border-slate-700 rounded-xl p-2"
                               />
-                              <p className="text-[10px] text-slate-500 mt-1">PDF, Word ලේඛන පමණක් තෝරන්න.</p>
                             </div>
 
                             <button
@@ -1210,7 +1198,6 @@ export default function AdminDashboard() {
                           </form>
                         </div>
 
-                        {/* Tutes List */}
                         <div className="lg:col-span-7 bg-[#0c1322] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
                           <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                             <h3 className="font-bold text-base flex items-center gap-2">
@@ -1224,7 +1211,6 @@ export default function AdminDashboard() {
                             <div className="p-12 rounded-xl bg-slate-900/30 border border-dashed border-slate-800 text-center space-y-2">
                               <File className="w-8 h-8 text-slate-600 mx-auto" />
                               <div className="text-xs font-semibold text-slate-400">මෙම පන්තියට තවමත් ටියූට් එකතු කර නොමැත.</div>
-                              <p className="text-[11px] text-slate-500">වම්පස ඇති Form එකෙන් පන්තියේ පළමු නිබන්ධනය Upload කරන්න.</p>
                             </div>
                           ) : (
                             <div className="space-y-3">
@@ -1275,8 +1261,6 @@ export default function AdminDashboard() {
                     {/* SECTION 3: ASSIGNMENTS & DEADLINES */}
                     {courseSectionTab === 'assignments' && (
                       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                        
-                        {/* Create Assignment Form */}
                         <div className="lg:col-span-5 bg-[#0c1322] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
                           <div className="flex items-center gap-2 pb-3 border-b border-slate-800">
                             <Award className="w-5 h-5 text-amber-400" />
@@ -1289,7 +1273,7 @@ export default function AdminDashboard() {
                               <input
                                 type="text"
                                 required
-                                placeholder="උදා: සෛල විද්‍යාව - පළමු සතියේ පැවරුම"
+                                placeholder="උදා: Python Variables & Loops - Assignment"
                                 value={assignTitle}
                                 onChange={(e) => setAssignTitle(e.target.value)}
                                 className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
@@ -1300,7 +1284,7 @@ export default function AdminDashboard() {
                               <label className="block text-xs text-slate-400 mb-1">උපදෙස් (Instructions)</label>
                               <textarea
                                 rows={2}
-                                placeholder="උදා: සියලුම ප්‍රශ්න වලට පිළිතුරු සපයා A4 කොළ වල ලියා ඡායාරූප PDF එකක් ලෙස Submit කරන්න."
+                                placeholder="උදා: A4 කොළ වල ලියා ඡායාරූප PDF එකක් ලෙස Submit කරන්න."
                                 value={assignDesc}
                                 onChange={(e) => setAssignDesc(e.target.value)}
                                 className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-amber-500 resize-none"
@@ -1309,7 +1293,7 @@ export default function AdminDashboard() {
 
                             <div className="grid grid-cols-2 gap-3">
                               <div>
-                                <label className="block text-xs text-amber-400 mb-1 font-semibold">අවසන් දිනය (Deadline Date) *</label>
+                                <label className="block text-xs text-amber-400 mb-1 font-semibold">Deadline Date *</label>
                                 <input
                                   type="date"
                                   required
@@ -1319,7 +1303,7 @@ export default function AdminDashboard() {
                                 />
                               </div>
                               <div>
-                                <label className="block text-xs text-amber-400 mb-1 font-semibold">අවසන් වේලාව (Time) *</label>
+                                <label className="block text-xs text-amber-400 mb-1 font-semibold">Time *</label>
                                 <input
                                   type="time"
                                   required
@@ -1332,7 +1316,7 @@ export default function AdminDashboard() {
 
                             <div className="grid grid-cols-2 gap-3">
                               <div>
-                                <label className="block text-xs text-slate-400 mb-1">මුළු ලකුණු (Total Marks)</label>
+                                <label className="block text-xs text-slate-400 mb-1">මුළු ලකුණු</label>
                                 <input
                                   type="number"
                                   value={assignMarks}
@@ -1341,7 +1325,7 @@ export default function AdminDashboard() {
                                 />
                               </div>
                               <div>
-                                <label className="block text-xs text-slate-400 mb-1">ප්‍රශ්න පත්‍රය (Paper PDF)</label>
+                                <label className="block text-xs text-slate-400 mb-1">Paper PDF (Optional)</label>
                                 <input
                                   type="file"
                                   accept=".pdf"
@@ -1357,26 +1341,24 @@ export default function AdminDashboard() {
                               className="w-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-bold py-3 rounded-xl text-xs transition shadow-lg shadow-amber-600/20 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
                             >
                               <Award className="w-4 h-4" />
-                              <span>{savingAssignment ? 'Assignment එක සකස් වෙමින් පවතී...' : '+ Deadline සහිතව Publish කරන්න'}</span>
+                              <span>{savingAssignment ? 'සකස් වෙමින් පවතී...' : '+ Deadline සහිතව Publish කරන්න'}</span>
                             </button>
                           </form>
                         </div>
 
-                        {/* Assignments List */}
                         <div className="lg:col-span-7 bg-[#0c1322] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
                           <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                             <h3 className="font-bold text-base flex items-center gap-2">
                               <Award className="w-4 h-4 text-amber-400" />
                               <span>ක්‍රියාකාරී Assignments ({courseAssignments.length})</span>
                             </h3>
-                            <span className="text-[11px] text-slate-400">Deadlines & Submissions</span>
+                            <span className="text-[11px] text-slate-400">Deadlines & Tasks</span>
                           </div>
 
                           {courseAssignments.length === 0 ? (
                             <div className="p-12 rounded-xl bg-slate-900/30 border border-dashed border-slate-800 text-center space-y-2">
                               <Award className="w-8 h-8 text-slate-600 mx-auto" />
                               <div className="text-xs font-semibold text-slate-400">මෙම පන්තියට තවමත් Assignments ලබාදී නොමැත.</div>
-                              <p className="text-[11px] text-slate-500">වම්පස ඇති Form එකෙන් පළමු පැවරුම සකස් කරන්න.</p>
                             </div>
                           ) : (
                             <div className="space-y-3">
@@ -1398,7 +1380,7 @@ export default function AdminDashboard() {
                                         <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
                                           isExpired ? 'bg-red-500/20 text-red-400' : 'bg-emerald-500/20 text-emerald-400'
                                         }`}>
-                                          {isExpired ? 'Closed (Expired)' : 'Open (Active)'}
+                                          {isExpired ? 'Closed' : 'Active'}
                                         </span>
                                       </div>
 
@@ -1413,7 +1395,7 @@ export default function AdminDashboard() {
                                         <span>🎯 Marks: {a.total_marks}</span>
                                         {a.file_url && (
                                           <a href={a.file_url} target="_blank" rel="noreferrer" className="text-blue-400 hover:underline flex items-center gap-1">
-                                            <Download className="w-3 h-3" /> ප්‍රශ්න පත්‍රය
+                                            <Download className="w-3 h-3" /> Paper PDF
                                           </a>
                                         )}
                                       </div>
@@ -1422,7 +1404,7 @@ export default function AdminDashboard() {
                                     <button
                                       onClick={() => handleDeleteAssignment(a.id)}
                                       className="p-2 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition cursor-pointer shrink-0"
-                                      title="Assignment එක මකන්න"
+                                      title="Delete"
                                     >
                                       <Trash2 className="w-4 h-4" />
                                     </button>
@@ -1448,7 +1430,7 @@ export default function AdminDashboard() {
                       <BookOpen className="w-5 h-5 text-purple-400" />
                       පාඨමාලා හා පන්ති කළමනාකරණය
                     </h2>
-                    <p className="text-xs text-slate-400">ඔබ දැනට පවත්වන සියලුම පන්ති මෙතැනින් කළමනාකරණය කරන්න.</p>
+                    <p className="text-xs text-slate-400">Learn ICT with Mano - ඔබගේ සියලුම පන්ති මෙතැනින් කළමනාකරණය කරන්න.</p>
                   </div>
                   <button
                     onClick={() => setShowAddCourseModal(true)}
@@ -1479,7 +1461,7 @@ export default function AdminDashboard() {
                         <div className="space-y-3">
                           <div className="flex items-center justify-between">
                             <span className="px-2.5 py-1 rounded-md bg-purple-500/10 border border-purple-500/20 text-purple-400 text-[10px] uppercase font-bold tracking-wider">
-                              {c.category || 'Class'} • {c.type || 'Theory'}
+                              {c.category || 'ICT'} • {c.type || 'Theory'}
                             </span>
                             <span className="font-mono text-xs font-bold text-emerald-400">
                               Rs. {c.monthly_fee || '0'}/-
@@ -1525,9 +1507,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ============================================================== */}
         {/* TAB 2: STUDENTS */}
-        {/* ============================================================== */}
         {activeTab === 'students' && (
           <div className="space-y-6">
             <div className="flex border-b border-slate-800 gap-4">
@@ -1826,9 +1806,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ============================================================== */}
         {/* TAB 3: DEVICES */}
-        {/* ============================================================== */}
         {activeTab === 'devices' && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
@@ -1907,7 +1885,7 @@ export default function AdminDashboard() {
                         <th className="py-3.5 px-4">දුරකථන අංකය</th>
                         <th className="py-3.5 px-4">Device Status</th>
                         <th className="py-3.5 px-4">Device Identifier</th>
-                        <th className="py-3.5 px-4 text-center">ක්‍රියාමාර්ගය (Action)</th>
+                        <th className="py-3.5 px-4 text-center">ක්‍‍රියාමාර්ගය (Action)</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/60">
@@ -1966,9 +1944,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ============================================================== */}
         {/* TAB 4: SLIP APPROVALS */}
-        {/* ============================================================== */}
         {activeTab === 'slips' && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
@@ -2193,9 +2169,7 @@ export default function AdminDashboard() {
 
       </main>
 
-      {/* ============================================================== */}
-      {/* MODAL: PREVIEW SLIP FULLSCREEN */}
-      {/* ============================================================== */}
+      {/* MODAL: PREVIEW SLIP */}
       {previewSlip && (
         <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-[#0c1322] border border-slate-800 max-w-2xl w-full rounded-3xl p-6 space-y-5 shadow-2xl relative max-h-[90vh] overflow-y-auto">
@@ -2263,9 +2237,7 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* ============================================================== */}
       {/* MODAL: CREATE NEW COURSE */}
-      {/* ============================================================== */}
       {showAddCourseModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-[#0c1322] border border-slate-800 max-w-md w-full rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl relative">
@@ -2281,7 +2253,7 @@ export default function AdminDashboard() {
                 <BookOpen className="w-5 h-5 text-purple-400" />
                 නව පන්තියක් සකස් කිරීම
               </h3>
-              <p className="text-xs text-slate-400">නව පන්තියේ විස්තර ඇතුළත් කර පද්ධතියට එක් කරන්න.</p>
+              <p className="text-xs text-slate-400">නව ICT පන්තියේ විස්තර ඇතුළත් කර පද්ධතියට එක් කරන්න.</p>
             </div>
 
             <form onSubmit={handleCreateCourse} className="space-y-4">
@@ -2290,7 +2262,7 @@ export default function AdminDashboard() {
                 <input
                   type="text"
                   required
-                  placeholder="උදා: Grade 8 Science - Theory Masterclass"
+                  placeholder="උදා: Grade 8 ICT - Theory & Practical"
                   value={newCourseTitle}
                   onChange={(e) => setNewCourseTitle(e.target.value)}
                   className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-purple-500"
@@ -2303,7 +2275,7 @@ export default function AdminDashboard() {
                   <input
                     type="text"
                     required
-                    placeholder="Grade 7 Science / A/L"
+                    placeholder="Grade 8 ICT / O/L ICT"
                     value={newCourseCategory}
                     onChange={(e) => setNewCourseCategory(e.target.value)}
                     className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-purple-500"
@@ -2317,6 +2289,7 @@ export default function AdminDashboard() {
                     className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-purple-500"
                   >
                     <option value="Theory">Theory</option>
+                    <option value="Practical">Practical</option>
                     <option value="Revision">Revision</option>
                     <option value="Paper">Paper Class</option>
                     <option value="Special">Special Seminar</option>
