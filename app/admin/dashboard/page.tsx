@@ -504,7 +504,7 @@ export default function AdminDashboard() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
-      alert('YouTube Recording එක සාර්ථකව එක් කරන ලදී!');
+      alert('YouTube Recording එක සාර්ථකව පන්තියට එක් කරන ලදී!');
       setCourseRecordings(prev => [data.recording, ...prev]);
       setRecTitle('');
       setRecYoutubeUrl('');
@@ -825,7 +825,7 @@ export default function AdminDashboard() {
 👤 Username: ${createdStudentData.username}
 🔑 Password: ${createdStudentData.password}
 
-⚠️️ ආරක්ෂක උපදෙස්: 
+⚠️ ආරක්ෂක උපදෙස්: 
 ඔබ පළමුව Login වන උපාංගයට ඔබගේ ගිණුම ස්වයංක්‍රීයව ලොක් වේ. එබැවින් ඔබේ පෞද්ගලික උපාංගයෙන් පමණක් Login වන්න.`;
   };
 
@@ -929,7 +929,7 @@ export default function AdminDashboard() {
       <main className="mt-8 max-w-7xl mx-auto">
         
         {/* ============================================================== */}
-        {/* TAB: ZOOM SETTINGS (NEW!) */}
+        {/* TAB: ZOOM SETTINGS */}
         {/* ============================================================== */}
         {activeTab === 'zoom' && (
           <div className="max-w-3xl mx-auto space-y-6">
@@ -1057,7 +1057,7 @@ export default function AdminDashboard() {
                         </span>
                       </h2>
                       <p className="text-xs text-slate-400">
-                        මාසික ගාස්තුව: <strong className="text-emerald-400">Rs. {selectedCourseForManage.monthly_fee}/-</strong> | සක්‍‍රිය සිසුන්: <strong className="text-purple-300">{courseStudentCount}</strong>
+                        මාසික ගාස්තුව: <strong className="text-emerald-400">Rs. {selectedCourseForManage.monthly_fee}/-</strong> | සක්‍රිය සිසුන්: <strong className="text-purple-300">{courseStudentCount}</strong>
                       </p>
                     </div>
                   </div>
@@ -1132,7 +1132,7 @@ export default function AdminDashboard() {
                           </div>
 
                           {courseLiveClass ? (
-                            <div className="p-5 rounded-xl bg-[#131c31] border border-purple-500/30 space-y-3">
+                            <div className="p-5 rounded-xl bg-[#131c31] border border-purple-500/30 space-y-4">
                               <div className="flex items-start justify-between">
                                 <div>
                                   <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400">වත්මන් සජීවී කාලසටහන</span>
@@ -1146,13 +1146,28 @@ export default function AdminDashboard() {
                                   <Trash2 className="w-4 h-4" />
                                 </button>
                               </div>
+
                               <div className="flex flex-wrap gap-4 text-xs text-slate-300">
                                 <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-purple-400" /> {courseLiveClass.date}</span>
                                 <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-purple-400" /> {courseLiveClass.time}</span>
                               </div>
+
+                              {/* ගුරුවරයාට HOST ලෙස පන්තිය START කිරීමේ ප්‍රධාන බොත්තම */}
+                              <div className="pt-2">
+                                <a
+                                  href={`/api/zoom/start?meetingId=${courseLiveClass.meeting_id || courseLiveClass.zoom_join_url?.split('meetingId=')[1]?.split('&')[0]}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 transition flex items-center justify-center gap-2 cursor-pointer"
+                                >
+                                  <Video className="w-4 h-4" />
+                                  <span>🚀 Start Class (Host ලෙස පන්තිය ආරම්භ කරන්න)</span>
+                                </a>
+                              </div>
+
                               <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-xs">
                                 <span className="text-slate-400 flex items-center gap-1 text-[11px]">
-                                  🛡️ <strong className="text-emerald-400">Anti-Leak Gateway:</strong> Link එක ආරක්ෂිතයි
+                                  🛡️ <strong className="text-emerald-400">Anti-Leak Gateway:</strong> ශිෂ්‍ය Link එක ආරක්ෂිතයි
                                 </span>
                                 <a
                                   href={courseLiveClass.zoom_join_url}
@@ -1161,7 +1176,7 @@ export default function AdminDashboard() {
                                   className="text-purple-400 hover:underline inline-flex items-center gap-1 text-[11px]"
                                 >
                                   <ExternalLink className="w-3 h-3" />
-                                  <span>පරීක්ෂා කරන්න (Test)</span>
+                                  <span>Student View එක බලන්න</span>
                                 </a>
                               </div>
                             </div>
@@ -1337,7 +1352,7 @@ export default function AdminDashboard() {
                       </div>
                     )}
 
-                    {/* SECTION 2: TUTES & MATERIALS */}
+                    {/* SECTION 2: TUTES & STUDY MATERIALS */}
                     {courseSectionTab === 'materials' && (
                       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
                         <div className="lg:col-span-5 bg-[#0c1322] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
