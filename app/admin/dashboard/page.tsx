@@ -7,7 +7,7 @@ import {
   Calendar, Clock, Film, PlayCircle,
   CheckCircle, AlertCircle, X, Shield, RefreshCw, Smartphone,
   Search, Unlock, Lock, PhoneCall, CreditCard, Eye, Check, ExternalLink, Sparkles,
-  FileText, UploadCloud, File, Award, Download
+  FileText, UploadCloud, File, Award, Download, KeyRound, CheckCircle2
 } from 'lucide-react';
 
 // Custom YouTube SVG Icon
@@ -18,7 +18,7 @@ const Youtube = ({ className = "w-4 h-4" }: { className?: string }) => (
 );
 
 export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState<'courses' | 'students' | 'devices' | 'slips'>('courses');
+  const [activeTab, setActiveTab] = useState<'courses' | 'students' | 'devices' | 'slips' | 'zoom'>('courses');
   const [studentSubTab, setStudentSubTab] = useState<'register' | 'list'>('register');
 
   // Courses state
@@ -63,7 +63,7 @@ export default function AdminDashboard() {
   const [matFile, setMatFile] = useState<File | null>(null);
   const [savingMaterial, setSavingMaterial] = useState(false);
 
-  // Assignments Form State (with Deadline)
+  // Assignments Form State
   const [assignTitle, setAssignTitle] = useState('');
   const [assignDesc, setAssignDesc] = useState('');
   const [assignDueDate, setAssignDueDate] = useState('');
@@ -103,6 +103,14 @@ export default function AdminDashboard() {
   const [previewSlip, setPreviewSlip] = useState<any | null>(null);
   const [processingSlipId, setProcessingSlipId] = useState<string | null>(null);
 
+  // Zoom Settings State
+  const [zoomAccountId, setZoomAccountId] = useState('');
+  const [zoomClientId, setZoomClientId] = useState('');
+  const [zoomClientSecret, setZoomClientSecret] = useState('');
+  const [savingZoom, setSavingZoom] = useState(false);
+  const [testingZoom, setTestingZoom] = useState(false);
+  const [zoomStatusMessage, setZoomStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
   useEffect(() => {
     fetchCourses();
     generateRandomPassword();
@@ -117,6 +125,9 @@ export default function AdminDashboard() {
     }
     if (activeTab === 'slips') {
       fetchSlipsData();
+    }
+    if (activeTab === 'zoom') {
+      fetchZoomSettings();
     }
   }, [activeTab, studentSubTab, selectedFilterCourse]);
 
@@ -170,6 +181,73 @@ export default function AdminDashboard() {
     }
   };
 
+  const fetchZoomSettings = async () => {
+    try {
+      const res = await fetch('/api/admin/zoom-settings');
+      const data = await res.json();
+      if (res.ok) {
+        setZoomAccountId(data.accountId || '');
+        setZoomClientId(data.clientId || '');
+        setZoomClientSecret(data.clientSecret || '');
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleSaveZoomSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingZoom(true);
+    setZoomStatusMessage(null);
+    try {
+      const res = await fetch('/api/admin/zoom-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'save_credentials',
+          accountId: zoomAccountId,
+          clientId: zoomClientId,
+          clientSecret: zoomClientSecret,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      setZoomStatusMessage({ type: 'success', text: '✅ Zoom Credentials සාර්ථකව සුරැකිණි! මින්පසු සජීවී පන්ති සෑදෙන්නේ මෙම එකවුන්ට් එකෙනි.' });
+    } catch (err: any) {
+      setZoomStatusMessage({ type: 'error', text: '❌ සුරැකීම අසාර්ථක විය: ' + err.message });
+    } finally {
+      setSavingZoom(false);
+    }
+  };
+
+  const handleTestZoomConnection = async () => {
+    setTestingZoom(true);
+    setZoomStatusMessage(null);
+    try {
+      const res = await fetch('/api/admin/zoom-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'test_connection',
+          accountId: zoomAccountId,
+          clientId: zoomClientId,
+          clientSecret: zoomClientSecret,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Connection Failed');
+      }
+
+      setZoomStatusMessage({ type: 'success', text: '🎉 විශිෂ්ටයි! Zoom Account එක සමඟ සාර්ථකව සම්බන්ධ විය. API Ready!' });
+    } catch (err: any) {
+      setZoomStatusMessage({ type: 'error', text: '⚠️ ' + err.message });
+    } finally {
+      setTestingZoom(false);
+    }
+  };
+
   const handleApproveSlip = async (slip: any) => {
     setProcessingSlipId(slip.id);
     try {
@@ -186,7 +264,7 @@ export default function AdminDashboard() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
-      alert('රිසිට්පත සාර්ථකව අනුමත කරන ලදී! ශිෂ්‍යයාට දින 30ක පන්ති ප්‍රවේශය සක්‍රිය විය.');
+      alert('රිසිට්පත සාර්ථකව අනුමත කරන ලදී!');
       if (previewSlip?.id === slip.id) setPreviewSlip(null);
       fetchSlipsData();
     } catch (err: any) {
@@ -252,7 +330,7 @@ export default function AdminDashboard() {
   };
 
   const handleBulkResetAll = async () => {
-    if (!confirm('අවවාදයයි! සියලුම සිසුන්ගේ උපාංග ලොක් එක එකවර Unlock කිරීමට අවශ්‍ය බව සහතිකද?')) return;
+    if (!confirm('අවවාදයයි! සියලුම සිසුන්ගේ උපාංග එකවර Unlock කිරීමට අවශ්‍ය බව සහතිකද?')) return;
 
     setLoadingDevices(true);
     try {
@@ -328,9 +406,7 @@ export default function AdminDashboard() {
   };
 
   const handleDeleteCourse = async (courseId: string, title: string) => {
-    if (!confirm(`"${title}" පන්තිය සම්පූර්ණයෙන්ම ඉවත් කිරීමට අවශ්‍යද? මෙහි ඇති සියලු දත්ත මැකී යනු ඇත.`)) {
-      return;
-    }
+    if (!confirm(`"${title}" පන්තිය සම්පූර්ණයෙන්ම ඉවත් කිරීමට අවශ්‍යද?`)) return;
     try {
       const res = await fetch('/api/manage-courses', {
         method: 'POST',
@@ -340,7 +416,7 @@ export default function AdminDashboard() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
-      alert('පන්තිය සාර්ථකව ඉවත් කරන ලදී!');
+      alert('පන්තිය ඉවත් කරන ලදී!');
       if (selectedCourseForManage?.id === courseId) {
         setSelectedCourseForManage(null);
       }
@@ -428,7 +504,7 @@ export default function AdminDashboard() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
-      alert('YouTube Recording එක සාර්ථකව පන්තියට එක් කරන ලදී!');
+      alert('YouTube Recording එක සාර්ථකව එක් කරන ලදී!');
       setCourseRecordings(prev => [data.recording, ...prev]);
       setRecTitle('');
       setRecYoutubeUrl('');
@@ -749,8 +825,8 @@ export default function AdminDashboard() {
 👤 Username: ${createdStudentData.username}
 🔑 Password: ${createdStudentData.password}
 
-⚠️ ආරක්ෂක උපදෙස්: 
-ඔබ පළමුව Login වන උපාංගයට ඔබගේ ගිණුම ස්වයංක්‍‍රීයව ලොක් වේ. එබැවින් ඔබේ පෞද්ගලික උපාංගයෙන් පමණක් Login වන්න.`;
+⚠️️ ආරක්ෂක උපදෙස්: 
+ඔබ පළමුව Login වන උපාංගයට ඔබගේ ගිණුම ස්වයංක්‍රීයව ලොක් වේ. එබැවින් ඔබේ පෞද්ගලික උපාංගයෙන් පමණක් Login වන්න.`;
   };
 
   const filteredStudents = studentsList.filter(s =>
@@ -798,7 +874,7 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Tab Navigation */}
+        {/* Tab Navigation with New Zoom Settings Tab */}
         <nav className="flex flex-wrap items-center gap-2 bg-[#0d1424] p-1.5 rounded-xl border border-slate-800">
           <button
             onClick={() => { setActiveTab('courses'); setSelectedCourseForManage(null); }}
@@ -837,12 +913,126 @@ export default function AdminDashboard() {
               </span>
             )}
           </button>
+          <button
+            onClick={() => setActiveTab('zoom')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'zoom' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Video className="w-4 h-4 text-blue-400" />
+            <span>🎥 Zoom Settings</span>
+          </button>
         </nav>
       </header>
 
       {/* Main Content Area */}
       <main className="mt-8 max-w-7xl mx-auto">
         
+        {/* ============================================================== */}
+        {/* TAB: ZOOM SETTINGS (NEW!) */}
+        {/* ============================================================== */}
+        {activeTab === 'zoom' && (
+          <div className="max-w-3xl mx-auto space-y-6">
+            <div className="bg-[#0c1322] border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
+              <div className="flex items-center gap-3.5 pb-4 border-b border-slate-800">
+                <div className="w-12 h-12 rounded-2xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
+                  <Video className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                    Zoom Account කළමනාකරණය
+                    <span className="px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-bold uppercase tracking-wider">
+                      Auto-Schedule Gateway
+                    </span>
+                  </h2>
+                  <p className="text-xs text-slate-400">
+                    ඔබගේ Zoom Pro / Business එකවුන්ට් එක මාරු වූ විට අලුත් Credentials මෙතැනින් Save කරන්න.
+                  </p>
+                </div>
+              </div>
+
+              {zoomStatusMessage && (
+                <div className={`p-4 rounded-2xl text-xs flex items-center gap-2 border ${
+                  zoomStatusMessage.type === 'success' 
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' 
+                    : 'bg-red-500/10 border-red-500/30 text-red-300'
+                }`}>
+                  {zoomStatusMessage.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
+                  <span>{zoomStatusMessage.text}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleSaveZoomSettings} className="space-y-5">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Zoom Account ID *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="උදා: xYzAbC123..."
+                    value={zoomAccountId}
+                    onChange={(e) => setZoomAccountId(e.target.value)}
+                    className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-3 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Zoom Client ID *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="උදා: aBcDeF456..."
+                    value={zoomClientId}
+                    onChange={(e) => setZoomClientId(e.target.value)}
+                    className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-3 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Zoom Client Secret *
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    placeholder="••••••••••••••••••••••••••••••"
+                    value={zoomClientSecret}
+                    onChange={(e) => setZoomClientSecret(e.target.value)}
+                    className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-3 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
+                  />
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    💡 Zoom Marketplace හි <strong>Server-to-Server OAuth</strong> App එකෙන් මේ විස්තර ලබාගත හැක.
+                  </p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
+                  <button
+                    type="button"
+                    disabled={testingZoom || !zoomAccountId || !zoomClientId || !zoomClientSecret}
+                    onClick={handleTestZoomConnection}
+                    className="w-full sm:w-auto px-5 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition border border-slate-700 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${testingZoom ? 'animate-spin' : ''}`} />
+                    <span>{testingZoom ? 'Zoom එක පරීක්ෂා කරමින්...' : '🔍 Connection එක Test කරන්න'}</span>
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={savingZoom}
+                    className="w-full sm:flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-lg shadow-blue-600/30 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    <KeyRound className="w-4 h-4" />
+                    <span>{savingZoom ? 'සුරැකෙමින් පවතී...' : '💾 Zoom Credentials සුරකින්න (Save Settings)'}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
         {/* TAB 1: COURSES */}
         {activeTab === 'courses' && (
           <div className="space-y-6">
@@ -867,7 +1057,7 @@ export default function AdminDashboard() {
                         </span>
                       </h2>
                       <p className="text-xs text-slate-400">
-                        මාසික ගාස්තුව: <strong className="text-emerald-400">Rs. {selectedCourseForManage.monthly_fee}/-</strong> | සක්‍රිය සිසුන්: <strong className="text-purple-300">{courseStudentCount}</strong>
+                        මාසික ගාස්තුව: <strong className="text-emerald-400">Rs. {selectedCourseForManage.monthly_fee}/-</strong> | සක්‍‍රිය සිසුන්: <strong className="text-purple-300">{courseStudentCount}</strong>
                       </p>
                     </div>
                   </div>
@@ -1147,7 +1337,7 @@ export default function AdminDashboard() {
                       </div>
                     )}
 
-                    {/* SECTION 2: TUTES & STUDY MATERIALS */}
+                    {/* SECTION 2: TUTES & MATERIALS */}
                     {courseSectionTab === 'materials' && (
                       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
                         <div className="lg:col-span-5 bg-[#0c1322] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
