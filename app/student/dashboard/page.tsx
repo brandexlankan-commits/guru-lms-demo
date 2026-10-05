@@ -111,14 +111,28 @@ export default function StudentDashboard() {
         setActiveRecording(null);
       }
 
-      // 3. Fetch Tutes / Materials
+      // 3. Fetch Tutes / Materials (course_materials සහ materials යන දෙකෙන්ම fetch කිරීම)
+      let matsData: any[] = [];
       const { data: mats } = await supabase
         .from('course_materials')
         .select('*')
         .eq('course_id', courseId)
         .order('created_at', { ascending: false });
 
-      setMaterials(mats || []);
+      if (mats && mats.length > 0) {
+        matsData = mats;
+      } else {
+        const { data: fallbackMats } = await supabase
+          .from('materials')
+          .select('*')
+          .eq('course_id', courseId)
+          .order('created_at', { ascending: false });
+        if (fallbackMats && fallbackMats.length > 0) {
+          matsData = fallbackMats;
+        }
+      }
+
+      setMaterials(matsData);
 
       // 4. Fetch Assignments
       const { data: assigns } = await supabase
@@ -226,7 +240,7 @@ export default function StudentDashboard() {
             </div>
           </div>
 
-          {/* Mobile Logout Button */}
+          {/* Mobile Logout Button (Visible only on phone) */}
           <button
             onClick={handleLogout}
             className="sm:hidden p-2 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500 hover:text-white transition cursor-pointer flex items-center gap-1 text-xs"
@@ -394,29 +408,29 @@ export default function StudentDashboard() {
                         className="w-full h-full border-0"
                       />
 
-                      {/* 🛡️ ANTI-CLICK SHIELDS (Mobile & Desktop) */}
-                      {/* 1. ඉහළ Shield එක: Title සහ Channel Link Block කිරීම */}
+                      {/* 🛡️ ANTI-CLICK SHIELDS */}
+                      {/* 1. Header Shield */}
                       <div 
                         className="absolute top-0 left-0 right-0 h-14 z-20 bg-transparent cursor-default" 
                         onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
                         onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); }}
                       />
 
-                      {/* 2. පහළ වම් කෙළවර Shield එක: Mobile Copy Link අයිකනය (🔗) සම්පූර්ණයෙන්ම Block කිරීම */}
+                      {/* 2. Bottom-Left Shield (Copy Link Icon Block) */}
                       <div 
                         className="absolute bottom-0 left-0 w-28 h-14 z-20 bg-transparent cursor-default"
                         onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
                         onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); }}
                       />
 
-                      {/* 3. පහළ දකුණු කෙළවර Shield එක: YouTube Logo එක Block කිරීම */}
+                      {/* 3. Bottom-Right Shield (YouTube Button Block) */}
                       <div 
                         className="absolute bottom-0 right-0 w-32 h-14 z-20 bg-transparent cursor-default"
                         onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
                         onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); }}
                       />
 
-                      {/* 💧 FAINT & ULTRA-TRANSLUCENT WATERMARK (කළු කොටු නොමැතිව බෝඩ් එකේ අකුරු 100% ක් පෙනෙන පරිදි) */}
+                      {/* 💧 FAINT & ULTRA-TRANSLUCENT WATERMARK */}
                       <div 
                         className="absolute z-30 pointer-events-none transition-all duration-1000 ease-in-out select-none"
                         style={{ top: watermarkPos.top, left: watermarkPos.left }}
