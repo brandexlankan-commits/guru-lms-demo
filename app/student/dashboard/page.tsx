@@ -39,11 +39,12 @@ export default function StudentDashboard() {
   useEffect(() => {
     fetchStudentData();
 
+    // Watermark එක සෙමින් ස්ථාන මාරු වීම
     const interval = setInterval(() => {
       const randomTop = Math.floor(15 + Math.random() * 65) + '%';
       const randomLeft = Math.floor(10 + Math.random() * 60) + '%';
       setWatermarkPos({ top: randomTop, left: randomLeft });
-    }, 8000);
+    }, 10000);
 
     return () => clearInterval(interval);
   }, []);
@@ -206,7 +207,7 @@ export default function StudentDashboard() {
 
   return (
     <div className="min-h-screen bg-[#070b14] text-white p-4 md:p-8 font-sans select-none">
-      {/* Top Header with Clean Logo Tile and Logout Button */}
+      {/* Top Header */}
       <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 border-b border-slate-800 max-w-7xl mx-auto">
         <div className="flex items-center justify-between w-full sm:w-auto">
           <div className="flex items-center gap-3.5">
@@ -225,7 +226,7 @@ export default function StudentDashboard() {
             </div>
           </div>
 
-          {/* Mobile Logout Button (Visible only on phones next to brand header) */}
+          {/* Mobile Logout Button */}
           <button
             onClick={handleLogout}
             className="sm:hidden p-2 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500 hover:text-white transition cursor-pointer flex items-center gap-1 text-xs"
@@ -253,7 +254,6 @@ export default function StudentDashboard() {
             ))}
           </div>
 
-          {/* Desktop Logout Button */}
           <button
             onClick={handleLogout}
             className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-500/10 border border-red-500/20 hover:bg-red-500 hover:text-white text-red-400 text-xs font-semibold transition cursor-pointer shadow-sm"
@@ -394,22 +394,34 @@ export default function StudentDashboard() {
                         className="w-full h-full border-0"
                       />
 
-                      {/* Anti-Click Shields */}
+                      {/* 🛡️ ANTI-CLICK SHIELDS (Mobile & Desktop) */}
+                      {/* 1. ඉහළ Shield එක: Title සහ Channel Link Block කිරීම */}
                       <div 
                         className="absolute top-0 left-0 right-0 h-14 z-20 bg-transparent cursor-default" 
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                      <div 
-                        className="absolute bottom-0 right-0 w-24 h-12 z-20 bg-transparent cursor-default"
-                        onClick={(e) => e.stopPropagation()}
+                        onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                        onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); }}
                       />
 
-                      {/* Floating Watermark */}
+                      {/* 2. පහළ වම් කෙළවර Shield එක: Mobile Copy Link අයිකනය (🔗) සම්පූර්ණයෙන්ම Block කිරීම */}
                       <div 
-                        className="absolute z-30 pointer-events-none transition-all duration-1000 ease-in-out px-3 py-1.5 rounded-lg bg-black/40 backdrop-blur-xs border border-white/10"
+                        className="absolute bottom-0 left-0 w-28 h-14 z-20 bg-transparent cursor-default"
+                        onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                        onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                      />
+
+                      {/* 3. පහළ දකුණු කෙළවර Shield එක: YouTube Logo එක Block කිරීම */}
+                      <div 
+                        className="absolute bottom-0 right-0 w-32 h-14 z-20 bg-transparent cursor-default"
+                        onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                        onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                      />
+
+                      {/* 💧 FAINT & ULTRA-TRANSLUCENT WATERMARK (කළු කොටු නොමැතිව බෝඩ් එකේ අකුරු 100% ක් පෙනෙන පරිදි) */}
+                      <div 
+                        className="absolute z-30 pointer-events-none transition-all duration-1000 ease-in-out select-none"
                         style={{ top: watermarkPos.top, left: watermarkPos.left }}
                       >
-                        <div className="text-[11px] font-mono text-white/50 tracking-wider font-bold">
+                        <div className="text-[11px] font-mono font-medium text-white/20 tracking-widest uppercase drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">
                           @{username} • Protected
                         </div>
                       </div>
