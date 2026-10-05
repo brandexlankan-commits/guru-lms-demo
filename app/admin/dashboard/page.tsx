@@ -6,7 +6,7 @@ import {
   BookOpen, Video, Users, Plus, Trash2, ArrowLeft, 
   Calendar, Clock, Film, PlayCircle,
   CheckCircle, AlertCircle, X, Shield, RefreshCw, Smartphone,
-  Search, Unlock, Lock, PhoneCall, CreditCard, Eye, Check, ExternalLink, Sparkles,
+  Search, Unlock, Lock, PhoneCall, CreditCard, Eye, EyeOff, Copy, Check, ExternalLink, Sparkles,
   FileText, UploadCloud, File, Award, Download, KeyRound, CheckCircle2
 } from 'lucide-react';
 
@@ -87,6 +87,7 @@ export default function AdminDashboard() {
   const [loadingStudents, setLoadingStudents] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const [showPasswordMap, setShowPasswordMap] = useState<{ [userId: string]: boolean }>({});
 
   // Devices Hub State
   const [deviceStats, setDeviceStats] = useState({ totalStudents: 0, lockedCount: 0, unlockedCount: 0 });
@@ -213,7 +214,7 @@ export default function AdminDashboard() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
-      setZoomStatusMessage({ type: 'success', text: '✅ Zoom Credentials සාර්ථකව සුරැකිණි! මින්පසු සජීවී පන්ති සෑදෙන්නේ මෙම එකවුන්ට් එකෙනි.' });
+      setZoomStatusMessage({ type: 'success', text: '✅ Zoom Credentials සාර්ථකව සුරැකිණි!' });
     } catch (err: any) {
       setZoomStatusMessage({ type: 'error', text: '❌ සුරැකීම අසාර්ථක විය: ' + err.message });
     } finally {
@@ -815,6 +816,10 @@ export default function AdminDashboard() {
     }
   };
 
+  const togglePasswordVisibility = (userId: string) => {
+    setShowPasswordMap(prev => ({ ...prev, [userId]: !prev[userId] }));
+  };
+
   const generateWhatsAppMessage = () => {
     if (!createdStudentData) return '';
     return `ආයුබෝවන් ${createdStudentData.fullName},
@@ -853,7 +858,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-[#070b14] text-white p-6 md:p-10 font-sans">
-      {/* Top Header with Enlarged Clean Logo Tile */}
+      {/* Top Header */}
       <header className="flex flex-col md:flex-row items-center justify-between gap-4 pb-8 border-b border-slate-800">
         <div className="flex items-center gap-3.5">
           <div className="w-14 h-14 rounded-2xl bg-white border-2 border-purple-500/50 flex items-center justify-center shadow-xl shadow-purple-500/25 overflow-hidden shrink-0">
@@ -874,7 +879,7 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Tab Navigation with New Zoom Settings Tab */}
+        {/* Tab Navigation */}
         <nav className="flex flex-wrap items-center gap-2 bg-[#0d1424] p-1.5 rounded-xl border border-slate-800">
           <button
             onClick={() => { setActiveTab('courses'); setSelectedCourseForManage(null); }}
@@ -928,9 +933,7 @@ export default function AdminDashboard() {
       {/* Main Content Area */}
       <main className="mt-8 max-w-7xl mx-auto">
         
-        {/* ============================================================== */}
         {/* TAB: ZOOM SETTINGS */}
-        {/* ============================================================== */}
         {activeTab === 'zoom' && (
           <div className="max-w-3xl mx-auto space-y-6">
             <div className="bg-[#0c1322] border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
@@ -964,9 +967,7 @@ export default function AdminDashboard() {
 
               <form onSubmit={handleSaveZoomSettings} className="space-y-5">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                    Zoom Account ID *
-                  </label>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">Zoom Account ID *</label>
                   <input
                     type="text"
                     required
@@ -978,9 +979,7 @@ export default function AdminDashboard() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                    Zoom Client ID *
-                  </label>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">Zoom Client ID *</label>
                   <input
                     type="text"
                     required
@@ -992,9 +991,7 @@ export default function AdminDashboard() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                    Zoom Client Secret *
-                  </label>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">Zoom Client Secret *</label>
                   <input
                     type="password"
                     required
@@ -1152,7 +1149,7 @@ export default function AdminDashboard() {
                                 <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-purple-400" /> {courseLiveClass.time}</span>
                               </div>
 
-                              {/* ගුරුවරයාට HOST ලෙස පන්තිය START කිරීමේ ප්‍රධාන බොත්තම */}
+                              {/* Host Start Class Button */}
                               <div className="pt-2">
                                 <a
                                   href={`/api/zoom/start?meetingId=${courseLiveClass.meeting_id || courseLiveClass.zoom_join_url?.split('meetingId=')[1]?.split('&')[0]}`}
@@ -1167,7 +1164,7 @@ export default function AdminDashboard() {
 
                               <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-xs">
                                 <span className="text-slate-400 flex items-center gap-1 text-[11px]">
-                                  🛡️ <strong className="text-emerald-400">Anti-Leak Gateway:</strong> ශිෂ්‍ය Link එක ආරක්ෂිතයි
+                                  🛡️️ <strong className="text-emerald-400">Anti-Leak Gateway:</strong> ශිෂ්‍ය Link එක ආරක්ෂිතයි
                                 </span>
                                 <a
                                   href={courseLiveClass.zoom_join_url}
@@ -1926,6 +1923,7 @@ export default function AdminDashboard() {
                           <tr>
                             <th className="py-3.5 px-4">ශිෂ්‍යයා (Student)</th>
                             <th className="py-3.5 px-4">Username</th>
+                            <th className="py-3.5 px-4">මුරපදය (Password)</th>
                             <th className="py-3.5 px-4">දුරකථන අංකය</th>
                             <th className="py-3.5 px-4">උපාංගය (Device)</th>
                             <th className="py-3.5 px-4">වලංගු කාලය (Access)</th>
@@ -1943,10 +1941,43 @@ export default function AdminDashboard() {
                                 })
                               : 'සීමාවක් නැත';
 
+                            const isPwdVisible = !!showPasswordMap[st.userId];
+
                             return (
                               <tr key={st.userId} className="hover:bg-slate-800/30 transition">
                                 <td className="py-3.5 px-4 font-semibold text-white">{st.fullName}</td>
                                 <td className="py-3.5 px-4 font-mono text-purple-400">@{st.username}</td>
+                                
+                                {/* NEW: Password with Eye Toggle & Copy Button */}
+                                <td className="py-3.5 px-4">
+                                  <div className="inline-flex items-center gap-2 bg-[#0c1322] px-2.5 py-1 rounded-lg border border-slate-700/60 font-mono text-[11px]">
+                                    <span className={isPwdVisible ? 'text-amber-300 font-bold' : 'text-slate-400'}>
+                                      {isPwdVisible ? st.password : '••••••••'}
+                                    </span>
+                                    <div className="flex items-center gap-1 border-l border-slate-700 pl-1.5 ml-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => togglePasswordVisibility(st.userId)}
+                                        className="text-slate-400 hover:text-white transition p-0.5"
+                                        title={isPwdVisible ? 'මුරපදය සඟවන්න' : 'මුරපදය බලන්න'}
+                                      >
+                                        {isPwdVisible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          navigator.clipboard.writeText(st.password);
+                                          alert(`@${st.username} ගේ Password එක Copy කරගන්නා ලදී!`);
+                                        }}
+                                        className="text-slate-400 hover:text-emerald-400 transition p-0.5"
+                                        title="Password Copy කරන්න"
+                                      >
+                                        <Copy className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                </td>
+
                                 <td className="py-3.5 px-4">
                                   {st.phone ? (
                                     <a

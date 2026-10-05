@@ -1,93 +1,69 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
+function getAdminClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+}
+
 export async function POST(req: Request) {
   try {
     const { fullName, username, phone, password, courseIds } = await req.json();
 
-    if (!fullName || !username || !password || !courseIds || courseIds.length === 0) {
-      return NextResponse.json(
-        { error: 'කරුණාකර සියලු අත්‍යවශ්‍ය තොරතුරු ඇතුළත් කරන්න.' },
-        { status: 400 }
-      );
+    if (!username || !password || !courseIds || courseIds.length === 0) {
+      return NextResponse.json({ error: 'අවශ්‍ය සියලු තොරතුරු ඇතුළත් කරන්න.' }, { status: 400 });
     }
 
-    const cleanUsername = username.toLowerCase().trim();
-    const dummyEmail = `${cleanUsername}@guru.internal`;
+    const supabaseAdmin = getAdminClient();
+    const cleanUser = username.trim().toLowerCase();
+    const email = `${cleanUser}@guru.lk`;
 
-    // Supabase Admin Client එක (Service Role Key සහිතව)
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-        },
-      }
-    );
-
-    // 1. Supabase Auth හරහා නව User සාදයි
-    const { data: userData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-      email: dummyEmail,
-      password: password,
+    // 1. Create User in Supabase Auth with initial_password in user_metadata
+    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+      email,
+      password: password.trim(),
       email_confirm: true,
       user_metadata: {
         full_name: fullName,
-        username: cleanUsername,
+        username: cleanUser,
         phone: phone || '',
-        role: 'student',
+        initial_password: password.trim(), // ගුරුතුමාට Dashboard එකේ පෙන්වීම සඳහා
+        device_id: null,
       },
     });
 
     if (authError) {
-      if (authError.message.includes('already exists') || authError.message.includes('unique')) {
-        return NextResponse.json(
-          { error: 'මෙම Username එක දැනටමත් භාවිතයේ ඇත. වෙනත් Username එකක් තෝරන්න.' },
-          { status: 400 }
-        );
+      if (authError.message.includes('already registered')) {
+        throw new Error('මෙම Username එක දැනටමත් භාවිතයේ පවතී. කරුණාකර වෙනත් Username එකක් ලබාදෙන්න.');
       }
-      return NextResponse.json({ error: authError.message }, { status: 400 });
+      throw authError;
     }
 
-    const studentId = userData.user.id;
+    const userId = authData.user.id;
 
-    // 2. profiles table එකේ record එක සකස් කිරීම
-    await supabaseAdmin.from('profiles').upsert({
-      id: studentId,
-      full_name: fullName,
-      username: cleanUsername,
-      phone: phone || '',
-      role: 'student',
-    });
-
-    // 3. තෝරාගත් සියලුම පන්ති වලට දින 30ක කාලයක් සහිතව Enroll කිරීම
-    const enrollments = courseIds.map((courseId: string) => ({
-      user_id: studentId,
-      course_id: courseId,
+    // 2. Enroll student into selected courses (Default 30 days active access)
+    const validUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    const enrollments = courseIds.map((cid: string) => ({
+      user_id: userId,
+      course_id: cid,
       status: 'active',
-      valid_until: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      valid_until: validUntil,
     }));
 
-    const { error: enrollError } = await supabaseAdmin
-      .from('course_enrollments')
-      .upsert(enrollments);
-
-    if (enrollError) {
-      return NextResponse.json({ error: enrollError.message }, { status: 500 });
-    }
+    const { error: enrollErr } = await supabaseAdmin.from('course_enrollments').insert(enrollments);
+    if (enrollErr) throw enrollErr;
 
     return NextResponse.json({
       success: true,
-      student: {
-        id: studentId,
-        fullName,
-        username: cleanUsername,
-        password,
-        phone,
-      },
+      userId,
+      username: cleanUser,
+      password: password.trim(),
     });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
+  } catch (err: any) {
+    console.error('Create student error:', err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

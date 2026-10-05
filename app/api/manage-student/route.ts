@@ -1,6 +1,15 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
+function getAdminClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+}
+
+// GET: Fetch students enrolled in a specific course
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -10,146 +19,79 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Course ID is required' }, { status: 400 });
     }
 
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      { auth: { autoRefreshToken: false, persistSession: false } }
-    );
+    const supabaseAdmin = getAdminClient();
 
     // 1. Get enrollments for this course
-    const { data: enrollments, error: enrollError } = await supabaseAdmin
+    const { data: enrollments, error: enrollErr } = await supabaseAdmin
       .from('course_enrollments')
-      .select('*')
+      .select('id, user_id, status, valid_until')
       .eq('course_id', courseId);
 
-    if (enrollError) throw enrollError;
+    if (enrollErr) throw enrollErr;
 
-    if (!enrollments || enrollments.length === 0) {
-      return NextResponse.json({ students: [] });
-    }
+    // 2. Get user metadata from Supabase Auth
+    const { data: { users }, error: usersErr } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+    if (usersErr) throw usersErr;
 
-    // 2. Extract user IDs
-    const userIds = enrollments
-      .map((e: any) => e.user_id || e.student_id)
-      .filter(Boolean);
-
-    if (userIds.length === 0) {
-      return NextResponse.json({ students: [] });
-    }
-
-    // 3. Fetch matching profiles from database
-    const { data: profiles } = await supabaseAdmin
-      .from('profiles')
-      .select('*')
-      .in('id', userIds);
-
-    // 4. Fetch auth users to get full_name, username, phone guaranteed from metadata
-    const authUsersResults = await Promise.all(
-      userIds.map((uId: string) => supabaseAdmin.auth.admin.getUserById(uId))
-    );
-
-    const authUsersMap = new Map();
-    authUsersResults.forEach((res) => {
-      if (res.data?.user) {
-        authUsersMap.set(res.data.user.id, res.data.user);
-      }
+    const usersMap = new Map();
+    (users || []).forEach((u: any) => {
+      usersMap.set(u.id, u);
     });
 
-    // 5. Combine data accurately
-    const combined = enrollments.map((enroll: any) => {
-      const uId = enroll.user_id || enroll.student_id;
-      const prof: any = profiles?.find((p: any) => p.id === uId) || {};
-      const authUser = authUsersMap.get(uId);
-
-      const fullName =
-        prof.full_name ||
-        authUser?.user_metadata?.full_name ||
-        authUser?.user_metadata?.name ||
-        'නම නොදනී';
-
-      const username =
-        prof.username ||
-        authUser?.user_metadata?.username ||
-        authUser?.email?.split('@')[0] ||
-        'user';
-
-      const phone =
-        prof.phone ||
-        authUser?.user_metadata?.phone ||
-        '';
-
-      const deviceId = prof.current_device_id || null;
-
+    const students = (enrollments || []).map((e: any) => {
+      const u = usersMap.get(e.user_id);
       return {
-        enrollmentId: enroll.id,
-        userId: uId,
-        courseId: enroll.course_id,
-        status: enroll.status || 'active',
-        validUntil: enroll.valid_until || null,
-        fullName,
-        username,
-        phone,
-        deviceId,
+        enrollmentId: e.id,
+        userId: e.user_id,
+        fullName: u?.user_metadata?.full_name || 'ශිෂ්‍යයා',
+        username: u?.user_metadata?.username || u?.email?.split('@')[0] || 'student',
+        phone: u?.user_metadata?.phone || '',
+        password: u?.user_metadata?.initial_password || u?.user_metadata?.password || 'Mano#2026',
+        deviceId: u?.user_metadata?.device_id || null,
+        validUntil: e.valid_until,
+        status: e.status,
       };
     });
 
-    return NextResponse.json({ students: combined });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ students });
+  } catch (err: any) {
+    console.error('Error fetching students:', err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
 
+// POST: Actions like Extend Access & Reset Device
 export async function POST(req: Request) {
   try {
-    const { action, userId, courseId, enrollmentId } = await req.json();
+    const supabaseAdmin = getAdminClient();
+    const body = await req.json();
+    const { action, userId, enrollmentId } = body;
 
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      { auth: { autoRefreshToken: false, persistSession: false } }
-    );
-
-    // ACTION 1: EXTEND ACCESS (+30 DAYS)
     if (action === 'extend_access') {
-      const now = new Date();
-      let newDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-
-      const updateFilter = enrollmentId ? { id: enrollmentId } : { course_id: courseId, user_id: userId };
-
-      const { error: updateError } = await supabaseAdmin
+      const newValidUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      const { error } = await supabaseAdmin
         .from('course_enrollments')
-        .update({
-          valid_until: newDate.toISOString(),
-          status: 'active',
-        })
-        .match(updateFilter);
+        .update({ valid_until: newValidUntil, status: 'active' })
+        .eq('id', enrollmentId);
 
-      if (updateError) throw updateError;
-
-      return NextResponse.json({
-        success: true,
-        validUntil: newDate.toISOString(),
-        message: 'පන්ති වලංගු කාලය තවත් දින 30 කට දීර්ඝ කරන ලදී!',
-      });
+      if (error) throw error;
+      return NextResponse.json({ success: true, validUntil: newValidUntil });
     }
 
-    // ACTION 2: RESET DEVICE (UNLOCK)
     if (action === 'reset_device') {
-      const { error: resetError } = await supabaseAdmin
-        .from('profiles')
-        .update({ current_device_id: null })
-        .eq('id', userId);
+      const { data: userData, error: userErr } = await supabaseAdmin.auth.admin.getUserById(userId);
+      if (userErr || !userData.user) throw new Error('ශිෂ්‍යයා හමු නොවීය.');
 
-      if (resetError) throw resetError;
-
-      return NextResponse.json({
-        success: true,
-        message: 'උපාංගය සාර්ථකව Reset කරන ලදී! ශිෂ්‍යයාට නව උපාංගයකින් Login විය හැක.',
+      const { error: updateErr } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+        user_metadata: { ...userData.user.user_metadata, device_id: null },
       });
+
+      if (updateErr) throw updateErr;
+      return NextResponse.json({ success: true });
     }
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
