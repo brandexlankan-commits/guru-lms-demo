@@ -453,31 +453,34 @@ export default function StudentDashboard() {
                         </button>
                       )}
 
-                      {/* 2. Top-Shield: Blocks Title & Channel while leaving right-32 free for Settings Gear */}
+                      {/* 2. Top-Shield: Title සහ Channel Block කිරීම (දකුණු පස Settings Gear සඳහා right-32 නිදහස් කර ඇත) */}
                       <div 
                         className="absolute top-0 left-0 right-32 h-16 z-20 bg-transparent cursor-default pointer-events-auto" 
                         onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
                         onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                        onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
                         onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); }}
                       />
 
-                      {/* 3. Bottom-Left Mobile Shield: Mobile Link Copy Icon Blocked */}
+                      {/* 3. Bottom-Left Shield: Copy Link Icon (🔗) Block කිරීම (Mobile සහ PC/Desktop දෙකටම ක්‍රියාත්මකයි) */}
                       <div 
-                        className="md:hidden absolute bottom-1 left-1 w-20 h-16 z-20 bg-transparent cursor-default pointer-events-auto"
+                        className="absolute bottom-0 left-0 w-36 h-24 z-20 bg-transparent cursor-default pointer-events-auto"
                         onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
                         onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                        onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
                         onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); }}
                       />
 
-                      {/* 4. Bottom-Right Shield: "Watch on YouTube" Blocked */}
+                      {/* 4. Bottom-Right Shield: "Watch on YouTube" Block කිරීම */}
                       <div 
-                        className="absolute bottom-0 right-0 w-60 h-14 z-20 bg-transparent cursor-default pointer-events-auto"
+                        className="absolute bottom-0 right-0 w-64 h-16 z-20 bg-transparent cursor-default pointer-events-auto"
                         onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
                         onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                        onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
                         onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); }}
                       />
 
-                      {/* 5. Ultra-Translucent Faint Watermark */}
+                      {/* 5. Ultra-Translucent Faint Watermark (අකුරු නොවැසෙන සියුම් Watermark එක) */}
                       <div 
                         className="absolute z-30 pointer-events-none transition-all duration-1000 ease-in-out select-none"
                         style={{ top: watermarkPos.top, left: watermarkPos.left }}
