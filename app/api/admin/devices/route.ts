@@ -9,40 +9,33 @@ function getAdminClient() {
   );
 }
 
+// GET: Return all registered students and their device lock status
 export async function GET() {
   try {
     const supabaseAdmin = getAdminClient();
 
-    // 1. Get all student profiles
-    const { data: profiles, error: profError } = await supabaseAdmin
-      .from('profiles')
-      .select('id, full_name, username, phone, current_device_id, role, updated_at')
-      .neq('role', 'teacher')
-      .order('updated_at', { ascending: false });
-
-    if (profError) throw profError;
-
-    // 2. Fetch auth metadata for safety (names / usernames)
-    const { data: authData } = await supabaseAdmin.auth.admin.listUsers();
-    const authMap = new Map();
-    authData?.users?.forEach((u) => {
-      authMap.set(u.id, u);
+    // Fetch all users directly from Supabase Auth
+    const { data: { users }, error } = await supabaseAdmin.auth.admin.listUsers({
+      perPage: 1000,
     });
 
-    const students = (profiles || []).map((p: any) => {
-      const authUser = authMap.get(p.id);
-      return {
-        id: p.id,
-        fullName: p.full_name || authUser?.user_metadata?.full_name || 'ශිෂ්‍යයා',
-        username: p.username || authUser?.user_metadata?.username || authUser?.email?.split('@')[0] || 'user',
-        phone: p.phone || authUser?.user_metadata?.phone || '',
-        deviceId: p.current_device_id || null,
-        isLocked: !!p.current_device_id,
-        updatedAt: p.updated_at,
-      };
-    });
+    if (error) throw error;
 
-    // 3. Stats Calculation
+    // Filter students
+    const students = (users || [])
+      .filter((u: any) => u.user_metadata?.username && u.email !== 'admin@guru.lk')
+      .map((u: any) => {
+        const deviceId = u.user_metadata?.device_id || null;
+        return {
+          id: u.id,
+          fullName: u.user_metadata?.full_name || 'ශිෂ්‍යයා',
+          username: u.user_metadata?.username || u.email?.split('@')[0],
+          phone: u.user_metadata?.phone || '',
+          deviceId: deviceId,
+          isLocked: !!deviceId,
+        };
+      });
+
     const totalStudents = students.length;
     const lockedCount = students.filter((s: any) => s.isLocked).length;
     const unlockedCount = totalStudents - lockedCount;
@@ -55,42 +48,56 @@ export async function GET() {
       },
       students,
     });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (err: any) {
+    console.error('Error fetching devices:', err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
 
+// POST: Reset Device for single user or bulk reset
 export async function POST(req: Request) {
   try {
     const supabaseAdmin = getAdminClient();
-    const { action, userId } = await req.json();
+    const body = await req.json();
+    const { action, userId } = body;
 
-    // ACTION 1: RESET SINGLE STUDENT DEVICE
     if (action === 'reset_device') {
-      if (!userId) return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
+      if (!userId) {
+        return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
+      }
 
-      const { error } = await supabaseAdmin
-        .from('profiles')
-        .update({ current_device_id: null })
-        .eq('id', userId);
+      const { data: userData, error: userErr } = await supabaseAdmin.auth.admin.getUserById(userId);
+      if (userErr || !userData.user) throw new Error('ශිෂ්‍යයා හමු නොවීය.');
 
-      if (error) throw error;
+      const updatedMeta = { ...userData.user.user_metadata, device_id: null };
+
+      const { error: updateErr } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+        user_metadata: updatedMeta,
+      });
+
+      if (updateErr) throw updateErr;
+
       return NextResponse.json({ success: true, message: 'උපාංගය සාර්ථකව Reset කරන ලදී!' });
     }
 
-    // ACTION 2: RESET ALL DEVICES (BULK RESET)
     if (action === 'reset_all') {
-      const { error } = await supabaseAdmin
-        .from('profiles')
-        .update({ current_device_id: null })
-        .neq('role', 'teacher');
-
+      const { data: { users }, error } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
       if (error) throw error;
-      return NextResponse.json({ success: true, message: 'සියලුම සිසුන්ගේ උපාංග සාර්ථකව Unlock කරන ලදී!' });
+
+      for (const u of users) {
+        if (u.user_metadata?.device_id) {
+          await supabaseAdmin.auth.admin.updateUserById(u.id, {
+            user_metadata: { ...u.user_metadata, device_id: null },
+          });
+        }
+      }
+
+      return NextResponse.json({ success: true, message: 'සියලුම උපාංග සාර්ථකව Unlock කරන ලදී!' });
     }
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (err: any) {
+    console.error('Error updating devices:', err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
