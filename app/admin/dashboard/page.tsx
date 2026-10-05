@@ -42,6 +42,7 @@ export default function AdminDashboard() {
   const [savingMarksId, setSavingMarksId] = useState<string | null>(null);
   const [marksInputMap, setMarksInputMap] = useState<{ [subId: string]: string }>({});
   const [feedbackInputMap, setFeedbackInputMap] = useState<{ [subId: string]: string }>({});
+  const [editingSubId, setEditingSubId] = useState<string | null>(null);
 
   // Add Course Modal State
   const [showAddCourseModal, setShowAddCourseModal] = useState(false);
@@ -718,6 +719,7 @@ export default function AdminDashboard() {
   const handleOpenGradingModal = async (assignment: any) => {
     setGradingModalAssignment(assignment);
     setLoadingSubmissions(true);
+    setEditingSubId(null);
     try {
       const res = await fetch(`/api/admin/assignment-submissions?assignmentId=${assignment.id}`);
       const data = await res.json();
@@ -763,10 +765,11 @@ export default function AdminDashboard() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
-      alert(`Marks saved successfully for @${sub.studentUsername}!`);
+      alert(`Marks saved and locked successfully for @${sub.studentUsername}!`);
       setAssignmentSubmissionsList(prev =>
         prev.map(s => (s.id === sub.id ? { ...s, marks: Number(enteredMarks), feedback: enteredFeedback, status: 'graded' } : s))
       );
+      setEditingSubId(null); // Lock automatically!
     } catch (err: any) {
       alert('Error: ' + err.message);
     } finally {
@@ -2733,7 +2736,7 @@ Your account will automatically bind to the first device you log in with. Please
         </div>
       )}
 
-      {/* 📝 MODAL: GRADING & SUBMISSIONS VIEWER */}
+      {/* 📝 MODAL: GRADING & SUBMISSIONS VIEWER (AUTO-LOCK IMPLEMENTATION) */}
       {gradingModalAssignment && (
         <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-[#0c1322] border border-slate-800 max-w-3xl w-full rounded-3xl p-6 sm:p-7 space-y-5 shadow-2xl relative max-h-[90vh] overflow-y-auto">
@@ -2783,6 +2786,9 @@ Your account will automatically bind to the first device you log in with. Please
                       minute: '2-digit',
                     });
 
+                    const isGraded = sub.marks !== null && sub.marks !== undefined;
+                    const isEditing = editingSubId === sub.id;
+
                     return (
                       <div key={sub.id} className="p-4 rounded-2xl bg-[#131c31] border border-slate-800 space-y-3">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-800/80">
@@ -2791,11 +2797,11 @@ Your account will automatically bind to the first device you log in with. Please
                               <span className="font-bold text-white text-xs">{sub.studentName}</span>
                               <span className="font-mono text-purple-400 text-[11px]">@{sub.studentUsername}</span>
                               <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
-                                sub.marks !== null && sub.marks !== undefined
+                                isGraded
                                   ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                                   : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                               }`}>
-                                {sub.marks !== null && sub.marks !== undefined ? `✅ Graded (${sub.marks}/${gradingModalAssignment.total_marks})` : '⏳ Review Pending'}
+                                {isGraded ? `✅ Graded (${sub.marks}/${gradingModalAssignment.total_marks})` : '⏳ Review Pending'}
                               </span>
                             </div>
                             <div className="text-[10px] text-slate-500 mt-0.5">
@@ -2828,39 +2834,85 @@ Your account will automatically bind to the first device you log in with. Please
                           </div>
                         </div>
 
-                        {/* Marks Input & Feedback Controls */}
-                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-1">
-                          <div className="flex items-center gap-2">
-                            <label className="text-xs font-semibold text-slate-300 shrink-0">Marks:</label>
-                            <input
-                              type="number"
-                              placeholder="Marks"
-                              value={marksInputMap[sub.id] ?? ''}
-                              onChange={(e) => setMarksInputMap(prev => ({ ...prev, [sub.id]: e.target.value }))}
-                              className="w-20 bg-[#0c1322] border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-emerald-400 font-mono font-bold focus:outline-none focus:border-amber-500 text-center"
-                            />
-                            <span className="text-xs text-slate-500 font-mono">/ {gradingModalAssignment.total_marks}</span>
-                          </div>
+                        {/* 🔒 LOCKED VIEW: Once graded, lock inputs and display clean summary */}
+                        {isGraded && !isEditing ? (
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl bg-[#0c1322] border border-slate-800/80">
+                            <div className="flex flex-wrap items-center gap-4 text-xs">
+                              <div className="flex items-center gap-2">
+                                <span className="text-slate-400 font-semibold">Awarded Marks:</span>
+                                <span className="px-3 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono font-bold text-xs">
+                                  {sub.marks} / {gradingModalAssignment.total_marks}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1.5 text-slate-300">
+                                <span className="text-slate-400 font-semibold">Feedback:</span>
+                                <span className="text-slate-200 italic font-mono text-[11px]">
+                                  {sub.feedback ? `"${sub.feedback}"` : <span className="text-slate-500 not-italic">No feedback added</span>}
+                                </span>
+                              </div>
+                            </div>
 
-                          <div className="flex-1">
-                            <input
-                              type="text"
-                              placeholder="Teacher Feedback (e.g. Excellent work! / Revise Question 3)"
-                              value={feedbackInputMap[sub.id] ?? ''}
-                              onChange={(e) => setFeedbackInputMap(prev => ({ ...prev, [sub.id]: e.target.value }))}
-                              className="w-full bg-[#0c1322] border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500"
-                            />
+                            <div className="flex items-center gap-2 self-end sm:self-auto">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800/80 border border-slate-700/60 text-amber-300 text-[10px] font-bold uppercase tracking-wider">
+                                <Lock className="w-3 h-3 text-amber-400" />
+                                <span>Locked</span>
+                              </span>
+                              <button
+                                onClick={() => setEditingSubId(sub.id)}
+                                className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-[11px] font-semibold transition cursor-pointer flex items-center gap-1"
+                                title="Change marks if needed"
+                              >
+                                <span>✏️ Edit</span>
+                              </button>
+                            </div>
                           </div>
+                        ) : (
+                          /* 📝 INPUT VIEW: Shown only when pending review OR when teacher explicitly clicked ✏️ Edit */
+                          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-1">
+                            <div className="flex items-center gap-2">
+                              <label className="text-xs font-semibold text-slate-300 shrink-0">Marks:</label>
+                              <input
+                                type="number"
+                                placeholder="Marks"
+                                value={marksInputMap[sub.id] ?? ''}
+                                onChange={(e) => setMarksInputMap(prev => ({ ...prev, [sub.id]: e.target.value }))}
+                                className="w-20 bg-[#0c1322] border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-emerald-400 font-mono font-bold focus:outline-none focus:border-amber-500 text-center"
+                              />
+                              <span className="text-xs text-slate-500 font-mono">/ {gradingModalAssignment.total_marks}</span>
+                            </div>
 
-                          <button
-                            disabled={savingMarksId === sub.id}
-                            onClick={() => handleSaveMarks(sub)}
-                            className="px-4 py-1.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition cursor-pointer shadow-md flex items-center justify-center gap-1.5 shrink-0"
-                          >
-                            <Check className="w-3.5 h-3.5" />
-                            <span>{savingMarksId === sub.id ? 'Saving...' : 'Save Marks'}</span>
-                          </button>
-                        </div>
+                            <div className="flex-1">
+                              <input
+                                type="text"
+                                placeholder="Teacher Feedback (e.g. Excellent work! / Revise Question 3)"
+                                value={feedbackInputMap[sub.id] ?? ''}
+                                onChange={(e) => setFeedbackInputMap(prev => ({ ...prev, [sub.id]: e.target.value }))}
+                                className="w-full bg-[#0c1322] border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500"
+                              />
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <button
+                                disabled={savingMarksId === sub.id}
+                                onClick={() => handleSaveMarks(sub)}
+                                className="px-4 py-1.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition cursor-pointer shadow-md flex items-center justify-center gap-1.5 shrink-0"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                                <span>{savingMarksId === sub.id ? 'Saving...' : isEditing ? 'Update & Lock' : 'Save Marks'}</span>
+                              </button>
+
+                              {isEditing && (
+                                <button
+                                  onClick={() => setEditingSubId(null)}
+                                  className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white text-xs rounded-xl transition cursor-pointer"
+                                >
+                                  Cancel
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
                       </div>
                     );
                   })}
