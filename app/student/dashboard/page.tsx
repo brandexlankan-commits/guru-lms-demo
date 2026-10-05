@@ -7,7 +7,7 @@ import {
   Video, PlayCircle, Film, Clock, 
   Calendar, CheckCircle, ExternalLink,
   FileText, Download, Award, UploadCloud, AlertCircle,
-  LogOut, Maximize, Minimize
+  LogOut, Maximize, Minimize, CreditCard, X, Check
 } from 'lucide-react';
 
 export default function StudentDashboard() {
@@ -37,6 +37,13 @@ export default function StudentDashboard() {
   const [submittingAssignId, setSubmittingAssignId] = useState<string | null>(null);
   const [submissionFile, setSubmissionFile] = useState<File | null>(null);
   const [uploadingSubmission, setUploadingSubmission] = useState(false);
+
+  // Bank Slip Upload Modal State
+  const [showSlipModal, setShowSlipModal] = useState(false);
+  const [slipFile, setSlipFile] = useState<File | null>(null);
+  const [slipAmount, setSlipAmount] = useState('');
+  const [uploadingSlip, setUploadingSlip] = useState(false);
+  const [slipSuccessMsg, setSlipSuccessMsg] = useState(false);
 
   // Floating Watermark position state
   const [watermarkPos, setWatermarkPos] = useState({ top: '30%', left: '40%' });
@@ -86,6 +93,7 @@ export default function StudentDashboard() {
         setCourses(enrolledCourses);
         const defaultCourse = enrolledCourses[0];
         setActiveCourse(defaultCourse);
+        setSlipAmount(defaultCourse.monthly_fee ? defaultCourse.monthly_fee.toString() : '2000');
         loadCourseContent(defaultCourse.id, user.id);
       }
     } catch (e) {
@@ -172,6 +180,7 @@ export default function StudentDashboard() {
 
   const handleSelectCourse = (course: any) => {
     setActiveCourse(course);
+    setSlipAmount(course.monthly_fee ? course.monthly_fee.toString() : '2000');
     loadCourseContent(course.id);
   };
 
@@ -239,6 +248,59 @@ export default function StudentDashboard() {
     }
   };
 
+  const handleUploadSlip = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!slipFile || !currentUser || !activeCourse) {
+      alert('කරුණාකර බැංකු රිසිට්පත තෝරන්න.');
+      return;
+    }
+
+    setUploadingSlip(true);
+    setSlipSuccessMsg(false);
+
+    try {
+      // 1. Upload Slip to Supabase Storage
+      const cleanFileName = slipFile.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const storagePath = `slips/${currentUser.id}_${activeCourse.id}_${Date.now()}_${cleanFileName}`;
+
+      const { error: uploadErr } = await supabase.storage
+        .from('lms-materials')
+        .upload(storagePath, slipFile, { cacheControl: '3600', upsert: true });
+
+      if (uploadErr) throw uploadErr;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('lms-materials')
+        .getPublicUrl(storagePath);
+
+      // 2. Submit Slip through Backend Gateway
+      const res = await fetch('/api/student/upload-slip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentId: currentUser.id,
+          courseId: activeCourse.id,
+          amount: parseFloat(slipAmount) || activeCourse.monthly_fee || 0,
+          slipUrl: publicUrl,
+        }),
+      });
+
+      const resData = await res.json();
+      if (!res.ok) throw new Error(resData.error || 'Slip submission failed');
+
+      setSlipSuccessMsg(true);
+      setTimeout(() => {
+        setShowSlipModal(false);
+        setSlipFile(null);
+        setSlipSuccessMsg(false);
+      }, 2500);
+    } catch (err: any) {
+      alert('දෝෂයකි: ' + err.message);
+    } finally {
+      setUploadingSlip(false);
+    }
+  };
+
   const username = currentUser?.user_metadata?.username || currentUser?.email?.split('@')[0] || 'student';
 
   return (
@@ -303,7 +365,7 @@ export default function StudentDashboard() {
       {/* Main Content Area */}
       <main className="max-w-7xl mx-auto mt-6 space-y-6">
         
-        {/* Course Info Banner */}
+        {/* Course Info Banner with Bank Slip Upload Trigger */}
         {activeCourse && (
           <div className="bg-[#0c1322] border border-slate-800 p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4 shadow-xl">
             <div>
@@ -320,10 +382,19 @@ export default function StudentDashboard() {
               </p>
             </div>
 
-            <div className="flex items-center gap-3">
-              <span className="px-3 py-1 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold flex items-center gap-1.5">
                 <CheckCircle className="w-3.5 h-3.5" /> Access Active
               </span>
+
+              {/* 💳 Bank Slip Upload Button */}
+              <button
+                onClick={() => setShowSlipModal(true)}
+                className="px-4 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/40 font-bold text-xs transition flex items-center gap-1.5 cursor-pointer shadow-md shadow-amber-500/10"
+              >
+                <CreditCard className="w-4 h-4" />
+                <span>💳 රිසිට්පත් Upload (Bank Slip)</span>
+              </button>
             </div>
           </div>
         )}
@@ -770,6 +841,83 @@ export default function StudentDashboard() {
         )}
 
       </main>
+
+      {/* 💳 MODAL: UPLOAD BANK SLIP */}
+      {showSlipModal && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-[#0c1322] border border-slate-800 max-w-md w-full rounded-3xl p-6 sm:p-7 space-y-5 shadow-2xl relative">
+            <button
+              onClick={() => { setShowSlipModal(false); setSlipSuccessMsg(false); }}
+              className="absolute right-5 top-5 p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                <CreditCard className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">බැංකු රිසිට්පත යොමු කිරීම</h3>
+                <p className="text-xs text-slate-400">{activeCourse?.title}</p>
+              </div>
+            </div>
+
+            {/* Bank Details Note */}
+            <div className="p-3.5 rounded-xl bg-[#131c31] border border-slate-800 text-xs space-y-1 text-slate-300">
+              <div className="font-semibold text-amber-300">🏦 පන්ති ගාස්තු තැන්පත් කළ යුතු ගිණුම් අංකය:</div>
+              <p className="font-mono text-white text-[13px]">BOC / Commercial Bank</p>
+              <p className="text-slate-400 text-[11px]">ගිණුම් හිමියාගේ නම: Learn ICT with Mano</p>
+            </div>
+
+            {slipSuccessMsg ? (
+              <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
+                <Check className="w-5 h-5 text-emerald-400 shrink-0" />
+                <span>රිසිට්පත සාර්ථකව යොමු කරන ලදී! ගුරුතුමා අනුමත කළ පසු ඔබේ පන්ති කාලය දීර්ඝ වනු ඇත.</span>
+              </div>
+            ) : (
+              <form onSubmit={handleUploadSlip} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    ගෙවූ මුදල (Amount - Rs.) *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    placeholder="2000"
+                    value={slipAmount}
+                    onChange={(e) => setSlipAmount(e.target.value)}
+                    className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-emerald-400 font-mono focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    බැංකු රිසිට්පත් ඡායාරූපය හෝ PDF *
+                  </label>
+                  <input
+                    type="file"
+                    required
+                    accept="image/*,.pdf"
+                    onChange={(e) => setSlipFile(e.target.files?.[0] || null)}
+                    className="w-full text-xs text-slate-300 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-amber-600/20 file:text-amber-400 hover:file:bg-amber-600/30 cursor-pointer bg-[#131c31] border border-slate-700 rounded-xl p-2"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={uploadingSlip}
+                  className="w-full py-3 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-bold rounded-xl text-xs transition shadow-lg shadow-amber-600/20 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <UploadCloud className="w-4 h-4" />
+                  <span>{uploadingSlip ? 'Upload වෙමින් පවතී...' : 'රිසිට්පත තහවුරු කර Submit කරන්න'}</span>
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
