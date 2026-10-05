@@ -35,6 +35,14 @@ export default function AdminDashboard() {
   const [courseStudentCount, setCourseStudentCount] = useState<number>(0);
   const [loadingManageDetails, setLoadingManageDetails] = useState<boolean>(false);
 
+  // Assignment Submissions & Grading Modal State
+  const [gradingModalAssignment, setGradingModalAssignment] = useState<any | null>(null);
+  const [assignmentSubmissionsList, setAssignmentSubmissionsList] = useState<any[]>([]);
+  const [loadingSubmissions, setLoadingSubmissions] = useState<boolean>(false);
+  const [savingMarksId, setSavingMarksId] = useState<string | null>(null);
+  const [marksInputMap, setMarksInputMap] = useState<{ [subId: string]: string }>({});
+  const [feedbackInputMap, setFeedbackInputMap] = useState<{ [subId: string]: string }>({});
+
   // Add Course Modal State
   const [showAddCourseModal, setShowAddCourseModal] = useState(false);
   const [newCourseTitle, setNewCourseTitle] = useState('');
@@ -681,6 +689,67 @@ export default function AdminDashboard() {
     }
   };
 
+  // 📝 Open Grading Modal & Fetch Submissions
+  const handleOpenGradingModal = async (assignment: any) => {
+    setGradingModalAssignment(assignment);
+    setLoadingSubmissions(true);
+    try {
+      const res = await fetch(`/api/admin/assignment-submissions?assignmentId=${assignment.id}`);
+      const data = await res.json();
+      if (res.ok) {
+        setAssignmentSubmissionsList(data.submissions || []);
+        const initialMarks: { [key: string]: string } = {};
+        const initialFeedback: { [key: string]: string } = {};
+        (data.submissions || []).forEach((s: any) => {
+          initialMarks[s.id] = s.marks !== null && s.marks !== undefined ? s.marks.toString() : '';
+          initialFeedback[s.id] = s.feedback || '';
+        });
+        setMarksInputMap(initialMarks);
+        setFeedbackInputMap(initialFeedback);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingSubmissions(false);
+    }
+  };
+
+  // 💾 Save Marks & Feedback for a submission
+  const handleSaveMarks = async (sub: any) => {
+    const enteredMarks = marksInputMap[sub.id];
+    const enteredFeedback = feedbackInputMap[sub.id];
+
+    if (enteredMarks === '' || enteredMarks === undefined) {
+      alert('කරුණාකර ලකුණු ප්‍රමාණය ඇතුළත් කරන්න.');
+      return;
+    }
+
+    setSavingMarksId(sub.id);
+    try {
+      const res = await fetch('/api/admin/assignment-submissions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'grade_submission',
+          submissionId: sub.id,
+          marks: enteredMarks,
+          feedback: enteredFeedback,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      alert(`@${sub.studentUsername} සඳහා ලකුණු සාර්ථකව සුරකින ලදී!`);
+      setAssignmentSubmissionsList(prev =>
+        prev.map(s => (s.id === sub.id ? { ...s, marks: Number(enteredMarks), feedback: enteredFeedback, status: 'graded' } : s))
+      );
+    } catch (err: any) {
+      alert('දෝෂයකි: ' + err.message);
+    } finally {
+      setSavingMarksId(null);
+    }
+  };
+
   const fetchStudentsForCourse = async (courseId: string) => {
     setLoadingStudents(true);
     try {
@@ -837,7 +906,7 @@ export default function AdminDashboard() {
     if (!confirm(`${student.fullName} ගේ උපාංගය Reset කිරීමට අවශ්‍යද?`)) return;
     setActionLoadingId(`reset_${student.userId}`);
     try {
-      const res = await fetch('/api/manage-student', {
+      const res = await fetch('/api/admin/devices', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -867,7 +936,6 @@ export default function AdminDashboard() {
   const getWhatsAppUrl = (student: any) => {
     const cleanPhone = (student.phone || '').replace(/[^0-9]/g, '').replace(/^0/, '');
     
-    // ⚠️ ගාස්තු නොගෙවූ (Unpaid) සිසුවෙකු නම් පමණක් Reminder Text එක ඇතුළත් කිරීම
     if (!student.isPaidForCurrentMonth) {
       const currentCourse = courses.find(c => c.id.toString() === selectedFilterCourse);
       const courseTitle = currentCourse ? currentCourse.title : 'ICT Class';
@@ -883,7 +951,6 @@ Learn ICT with Mano`;
       return `https://wa.me/94${cleanPhone}?text=${encodeURIComponent(message)}`;
     }
 
-    // ✅ ගාස්තු ගෙවා ඇති (Paid) සිසුවෙකු නම් කිසිදු Reminder Message එකක් නොමැතිව සාමාන්‍ය Chat එක පමණක් Open වීම
     return `https://wa.me/94${cleanPhone}`;
   };
 
@@ -898,7 +965,7 @@ Learn ICT with Mano`;
 🔑 Password: ${createdStudentData.password}
 
 ⚠️ ආරක්ෂක උපදෙස්: 
-ඔබ පළමුව Login වන උපාංගයට ඔබගේ ගිණුම ස්වයංක්‍රීයව ලොක් වේ. එබැවින් ඔබේ පෞද්ගලික උපාංගයෙන් පමණක් Login වන්න.`;
+ඔබ පළමුව Login වන උපාංගයට ඔබගේ ගිණුම ස්වයංක්‍‍රීයව ලොක් වේ. එබැවින් ඔබේ පෞද්ගලික උපාංගයෙන් පමණක් Login වන්න.`;
   };
 
   // Filter students by Search Query and Payment Status (All / Paid / Unpaid)
@@ -1606,8 +1673,8 @@ Learn ICT with Mano`;
                                 });
 
                                 return (
-                                  <div key={a.id} className="p-4 rounded-xl bg-[#131c31] border border-slate-800 hover:border-slate-700 transition flex items-center justify-between group">
-                                    <div className="space-y-1.5 pr-4">
+                                  <div key={a.id} className="p-4 rounded-xl bg-[#131c31] border border-slate-800 hover:border-slate-700 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 group">
+                                    <div className="space-y-1.5 pr-2">
                                       <div className="flex items-center gap-2">
                                         <h5 className="text-xs font-bold text-white group-hover:text-amber-300 transition">{a.title}</h5>
                                         <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
@@ -1625,13 +1692,25 @@ Learn ICT with Mano`;
                                       </div>
                                     </div>
 
-                                    <button
-                                      onClick={() => handleDeleteAssignment(a.id)}
-                                      className="p-2 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition cursor-pointer shrink-0"
-                                      title="Delete"
-                                    >
-                                      <Trash2 className="w-4 h-4" />
-                                    </button>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                      {/* 📥 Submissions and Marks Button */}
+                                      <button
+                                        onClick={() => handleOpenGradingModal(a)}
+                                        className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/40 font-bold text-xs transition flex items-center gap-1.5 cursor-pointer shadow-sm"
+                                        title="සිසුන්ගේ පිළිතුරු පත්‍ර බලා ලකුණු ලබාදෙන්න"
+                                      >
+                                        <Award className="w-3.5 h-3.5" />
+                                        <span>📥 පිළිතුරු පත්‍ර & ලකුණු</span>
+                                      </button>
+
+                                      <button
+                                        onClick={() => handleDeleteAssignment(a.id)}
+                                        className="p-2 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition cursor-pointer shrink-0"
+                                        title="Delete"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    </div>
                                   </div>
                                 );
                               })}
@@ -1948,7 +2027,7 @@ Learn ICT with Mano`;
                           : 'text-amber-400/90 hover:text-amber-300'
                       }`}
                     >
-                      <span>⚠ {currentMonthName} නොගෙවූ සිසුන්</span>
+                      <span>⚠️ {currentMonthName} නොගෙවූ සිසුන්</span>
                       <span className="px-1.5 py-0.2 rounded-full bg-slate-900 text-amber-300 text-[10px] font-bold">
                         {unpaidCount}
                       </span>
@@ -2554,6 +2633,144 @@ Learn ICT with Mano`;
         )}
 
       </main>
+
+      {/* 📝 MODAL: GRADING & SUBMISSIONS VIEWER */}
+      {gradingModalAssignment && (
+        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-[#0c1322] border border-slate-800 max-w-3xl w-full rounded-3xl p-6 sm:p-7 space-y-5 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setGradingModalAssignment(null)}
+              className="absolute right-5 top-5 p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center gap-3 pb-3 border-b border-slate-800 pr-8">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                <Award className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  {gradingModalAssignment.title}
+                  <span className="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 text-[10px] font-bold">
+                    උපරිම ලකුණු: {gradingModalAssignment.total_marks}
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-400">සිසුන් භාරදුන් පිළිතුරු පත්‍ර පරීක්ෂාව සහ ලකුණු ලබාදීම</p>
+              </div>
+            </div>
+
+            {loadingSubmissions ? (
+              <div className="p-12 text-center text-slate-400 text-xs">පිළිතුරු පත්‍ර ලබාගනිමින් පවතී...</div>
+            ) : assignmentSubmissionsList.length === 0 ? (
+              <div className="p-12 rounded-2xl bg-[#131c31] border border-dashed border-slate-800 text-center space-y-2">
+                <Award className="w-10 h-10 text-slate-600 mx-auto" />
+                <h4 className="text-sm font-semibold text-slate-300">තවමත් කිසිදු ශිෂ්‍යයෙකු පිළිතුරු පත්‍ර භාරදී නොමැත</h4>
+                <p className="text-xs text-slate-500">සිසුන් පිළිතුරු පත්‍ර Upload කළ පසු මෙහි ලැයිස්තුගත වනු ඇත.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="text-xs text-slate-400 font-semibold">
+                  භාරදුන් පිළිතුරු පත්‍ර ගණන: <strong className="text-emerald-400 font-mono">{assignmentSubmissionsList.length}</strong>
+                </div>
+
+                <div className="space-y-3">
+                  {assignmentSubmissionsList.map((sub) => {
+                    const formattedDate = new Date(sub.submitted_at).toLocaleString('si-LK', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    });
+
+                    return (
+                      <div key={sub.id} className="p-4 rounded-2xl bg-[#131c31] border border-slate-800 space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-800/80">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-white text-xs">{sub.studentName}</span>
+                              <span className="font-mono text-purple-400 text-[11px]">@{sub.studentUsername}</span>
+                              <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
+                                sub.marks !== null && sub.marks !== undefined
+                                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                  : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                              }`}>
+                                {sub.marks !== null && sub.marks !== undefined ? `✅ Graded (${sub.marks}/${gradingModalAssignment.total_marks})` : '⏳ Review Pending'}
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-slate-500 mt-0.5">
+                              📅 භාරදුන් දිනය: {formattedDate}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            {sub.studentPhone && (
+                              <a
+                                href={`https://wa.me/94${sub.studentPhone.replace(/[^0-9]/g, '').replace(/^0/, '')}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="px-2.5 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-600 hover:text-white text-emerald-400 text-[11px] font-semibold transition border border-emerald-500/30 flex items-center gap-1"
+                              >
+                                <MessageSquare className="w-3 h-3" />
+                                <span>WhatsApp</span>
+                              </a>
+                            )}
+
+                            <a
+                              href={sub.submission_file_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-bold transition flex items-center gap-1.5 shadow"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                              <span>📄 පිළිතුරු පත්‍රය බලන්න</span>
+                            </a>
+                          </div>
+                        </div>
+
+                        {/* Marks Input & Feedback Controls */}
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-1">
+                          <div className="flex items-center gap-2">
+                            <label className="text-xs font-semibold text-slate-300 shrink-0">ලකුණු:</label>
+                            <input
+                              type="number"
+                              placeholder="ලකුණු"
+                              value={marksInputMap[sub.id] ?? ''}
+                              onChange={(e) => setMarksInputMap(prev => ({ ...prev, [sub.id]: e.target.value }))}
+                              className="w-20 bg-[#0c1322] border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-emerald-400 font-mono font-bold focus:outline-none focus:border-amber-500 text-center"
+                            />
+                            <span className="text-xs text-slate-500 font-mono">/ {gradingModalAssignment.total_marks}</span>
+                          </div>
+
+                          <div className="flex-1">
+                            <input
+                              type="text"
+                              placeholder="ගුරු සටහන / Feedback (උදා: විශිෂ්ටයි! / ප්‍රශ්න අංක 3 නැවත බලන්න)"
+                              value={feedbackInputMap[sub.id] ?? ''}
+                              onChange={(e) => setFeedbackInputMap(prev => ({ ...prev, [sub.id]: e.target.value }))}
+                              className="w-full bg-[#0c1322] border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500"
+                            />
+                          </div>
+
+                          <button
+                            disabled={savingMarksId === sub.id}
+                            onClick={() => handleSaveMarks(sub)}
+                            className="px-4 py-1.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition cursor-pointer shadow-md flex items-center justify-center gap-1.5 shrink-0"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            <span>{savingMarksId === sub.id ? 'සුරැකෙමින්...' : 'ලකුණු සුරකින්න'}</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* MODAL: PREVIEW SLIP */}
       {previewSlip && (
