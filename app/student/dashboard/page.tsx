@@ -2,13 +2,16 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useRouter } from 'next/navigation';
 import { 
   Video, PlayCircle, Lock, ShieldAlert, Film, Clock, 
   Calendar, CheckCircle, Smartphone, ExternalLink, Sparkles,
-  FileText, Download, Award, UploadCloud, Check, AlertCircle, File
+  FileText, Download, Award, UploadCloud, Check, AlertCircle, File,
+  LogOut
 } from 'lucide-react';
 
 export default function StudentDashboard() {
+  const router = useRouter();
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [courses, setCourses] = useState<any[]>([]);
   const [activeCourse, setActiveCourse] = useState<any | null>(null);
@@ -48,7 +51,10 @@ export default function StudentDashboard() {
   const fetchStudentData = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        router.push('/login');
+        return;
+      }
       setCurrentUser(user);
 
       const { data: enrollments } = await supabase
@@ -141,6 +147,13 @@ export default function StudentDashboard() {
     loadCourseContent(course.id);
   };
 
+  const handleLogout = async () => {
+    if (confirm('ඔබට පද්ධතියෙන් නික්මීමට (Log out) අවශ්‍ය බව සහතිකද?')) {
+      await supabase.auth.signOut();
+      router.push('/login');
+    }
+  };
+
   const handleSubmitAssignment = async (assignmentId: string) => {
     if (!submissionFile || !currentUser) {
       alert('කරුණාකර ඔබේ පිළිතුරු පත්‍රයේ PDF හෝ Image ගොනුවක් තෝරන්න.');
@@ -193,39 +206,61 @@ export default function StudentDashboard() {
 
   return (
     <div className="min-h-screen bg-[#070b14] text-white p-4 md:p-8 font-sans select-none">
-      {/* Top Header with Enlarged Clean Logo Tile */}
-      <header className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-6 border-b border-slate-800 max-w-7xl mx-auto">
-        <div className="flex items-center gap-3.5">
-          <div className="w-13 h-13 md:w-14 md:h-14 rounded-2xl bg-white border-2 border-purple-500/50 flex items-center justify-center shadow-xl shadow-purple-500/25 overflow-hidden shrink-0">
-            <img 
-              src="/logo.png" 
-              alt="Learn ICT with Mano" 
-              className="w-full h-full object-contain scale-[2.4] transform" 
-            />
+      {/* Top Header with Clean Logo Tile and Logout Button */}
+      <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 border-b border-slate-800 max-w-7xl mx-auto">
+        <div className="flex items-center justify-between w-full sm:w-auto">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-white border-2 border-purple-500/50 flex items-center justify-center shadow-xl shadow-purple-500/25 overflow-hidden shrink-0">
+              <img 
+                src="/logo.png" 
+                alt="Learn ICT with Mano" 
+                className="w-full h-full object-contain scale-[2.4] transform" 
+              />
+            </div>
+            <div>
+              <h1 className="text-base sm:text-lg font-black tracking-tight text-white flex items-center gap-2">
+                Learn ICT with Mano
+              </h1>
+              <p className="text-[11px] sm:text-xs text-slate-400">Student Portal • ආයුබෝවන්, <span className="text-purple-300 font-mono">@{username}</span></p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-lg font-black tracking-tight text-white flex items-center gap-2">
-              Learn ICT with Mano
-            </h1>
-            <p className="text-xs text-slate-400">Student Portal • ආයුබෝවන්, <span className="text-purple-300 font-mono">@{username}</span></p>
-          </div>
+
+          {/* Mobile Logout Button (Visible only on phones next to brand header) */}
+          <button
+            onClick={handleLogout}
+            className="sm:hidden p-2 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500 hover:text-white transition cursor-pointer flex items-center gap-1 text-xs"
+            title="Log out"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
 
-        {/* Course Pills */}
-        <div className="flex flex-wrap gap-2">
-          {courses.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => handleSelectCourse(c)}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer ${
-                activeCourse?.id === c.id
-                  ? 'bg-purple-600 text-white shadow-md'
-                  : 'bg-[#0c1322] border border-slate-800 text-slate-400 hover:text-white'
-              }`}
-            >
-              📖 {c.title}
-            </button>
-          ))}
+        {/* Course Pills and Desktop Logout Button */}
+        <div className="flex flex-wrap items-center justify-between sm:justify-end gap-2.5 w-full sm:w-auto">
+          <div className="flex flex-wrap gap-2">
+            {courses.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => handleSelectCourse(c)}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer ${
+                  activeCourse?.id === c.id
+                    ? 'bg-purple-600 text-white shadow-md'
+                    : 'bg-[#0c1322] border border-slate-800 text-slate-400 hover:text-white'
+                }`}
+              >
+                📖 {c.title}
+              </button>
+            ))}
+          </div>
+
+          {/* Desktop Logout Button */}
+          <button
+            onClick={handleLogout}
+            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-500/10 border border-red-500/20 hover:bg-red-500 hover:text-white text-red-400 text-xs font-semibold transition cursor-pointer shadow-sm"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Log out</span>
+          </button>
         </div>
       </header>
 
