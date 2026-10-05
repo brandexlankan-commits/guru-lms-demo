@@ -77,7 +77,7 @@ export async function GET() {
   }
 }
 
-// POST: Approve or Reject Slips (Calendar Month Billing)
+// POST: Approve, Reject, or Delete Slips
 export async function POST(req: Request) {
   try {
     const supabaseAdmin = getAdminClient();
@@ -88,8 +88,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Slip ID is required' }, { status: 400 });
     }
 
+    // 1. APPROVE SLIP
     if (action === 'approve') {
-      // 1. Update slip status to approved
       const { error: slipErr } = await supabaseAdmin
         .from('slips')
         .update({ status: 'approved' })
@@ -97,7 +97,7 @@ export async function POST(req: Request) {
 
       if (slipErr) throw slipErr;
 
-      // 2. Calculate End of Current Month
+      // End of Current Month
       const now = new Date();
       const endOfCurrentMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
       const newValidUntil = endOfCurrentMonth.toISOString();
@@ -132,6 +132,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, message: 'රිසිට්පත අනුමත කර මෙම මාසය සඳහා පන්තිය සක්‍රිය කරන ලදී!' });
     }
 
+    // 2. REJECT SLIP
     if (action === 'reject') {
       const { error: rejectErr } = await supabaseAdmin
         .from('slips')
@@ -141,6 +142,18 @@ export async function POST(req: Request) {
       if (rejectErr) throw rejectErr;
 
       return NextResponse.json({ success: true, message: 'රිසිට්පත ප්‍රතික්ෂේප කරන ලදී.' });
+    }
+
+    // 3. DELETE SLIP (අවශ්‍ය විට පද්ධතියෙන් ඉවත් කිරීම)
+    if (action === 'delete') {
+      const { error: deleteErr } = await supabaseAdmin
+        .from('slips')
+        .delete()
+        .eq('id', slipId);
+
+      if (deleteErr) throw deleteErr;
+
+      return NextResponse.json({ success: true, message: 'රිසිට්පත සාර්ථකව ඉවත් කරන ලදී!' });
     }
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });

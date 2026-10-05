@@ -312,6 +312,33 @@ export default function AdminDashboard() {
     }
   };
 
+  // 🗑️ Delete Slip (රිසිට්පත පද්ධතියෙන් සම්පූර්ණයෙන්ම ඉවත් කිරීම)
+  const handleDeleteSlip = async (slip: any) => {
+    if (!confirm(`${slip.studentName} ගේ මෙම රිසිට්පත (${slip.course_name}) පද්ධතියෙන් සම්පූර්ණයෙන්ම Delete කිරීමට අවශ්‍ය බව සහතිකද?`)) return;
+
+    setProcessingSlipId(slip.id);
+    try {
+      const res = await fetch('/api/admin/slips', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'delete',
+          slipId: slip.id,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      alert(data.message || 'රිසිට්පත සාර්ථකව ඉවත් කරන ලදී.');
+      if (previewSlip?.id === slip.id) setPreviewSlip(null);
+      fetchSlipsData();
+    } catch (err: any) {
+      alert('දෝෂයකි: ' + err.message);
+    } finally {
+      setProcessingSlipId(null);
+    }
+  };
+
   const handleResetSingleDevice = async (student: any) => {
     if (!confirm(`${student.fullName} (@${student.username}) ගේ උපාංගය Reset කිරීමට අවශ්‍යද?`)) return;
 
@@ -2619,8 +2646,19 @@ Learn ICT with Mano`;
                             </button>
                           </div>
                         ) : (
-                          <div className="text-center py-1 text-[11px] text-slate-500">
-                            {slip.status === 'approved' ? 'මෙම රිසිට්පත අනුමත කර ඇත.' : 'මෙම රිසිට්පත ප්‍රතික්ෂේප කර ඇත.'}
+                          <div className="flex items-center justify-between py-1 text-[11px] text-slate-500">
+                            <span>{slip.status === 'approved' ? 'මෙම රිසිට්පත අනුමත කර ඇත.' : 'මෙම රිසිට්පත ප්‍රතික්ෂේප කර ඇත.'}</span>
+                            
+                            {/* 🗑️ Delete Button for Approved/Rejected Slips */}
+                            <button
+                              disabled={processingSlipId === slip.id}
+                              onClick={() => handleDeleteSlip(slip)}
+                              className="px-2.5 py-1 rounded-lg bg-red-600/10 hover:bg-red-600 text-red-400 hover:text-white border border-red-500/30 text-[10px] font-semibold transition cursor-pointer flex items-center gap-1 shadow-sm"
+                              title="රිසිට්පත පද්ධතියෙන් ඉවත් කරන්න (Delete)"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>Delete</span>
+                            </button>
                           </div>
                         )}
                       </div>
@@ -2633,6 +2671,83 @@ Learn ICT with Mano`;
         )}
 
       </main>
+
+      {/* MODAL: PREVIEW SLIP */}
+      {previewSlip && (
+        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-[#0c1322] border border-slate-800 max-w-2xl w-full rounded-3xl p-6 space-y-5 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setPreviewSlip(null)}
+              className="absolute right-5 top-5 p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center justify-between pr-8">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <CreditCard className="w-4 h-4 text-purple-400" />
+                  බැංකු රිසිට්පත් පරීක්ෂාව
+                </h3>
+                <p className="text-xs text-slate-400">
+                  {previewSlip.studentName} (@{previewSlip.studentUsername}) • {previewSlip.course_name}
+                </p>
+              </div>
+              <span className="font-mono font-bold text-emerald-400 text-sm">
+                Rs. {previewSlip.amount}/-
+              </span>
+            </div>
+
+            <div className="rounded-2xl border border-slate-800 overflow-hidden bg-slate-950 flex items-center justify-center max-h-[60vh]">
+              <img
+                src={previewSlip.slip_url}
+                alt="Full Slip Preview"
+                className="w-full h-auto max-h-[60vh] object-contain"
+              />
+            </div>
+
+            <div className="flex items-center justify-between gap-3 pt-2">
+              <a
+                href={previewSlip.slip_url}
+                target="_blank"
+                rel="noreferrer"
+                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>මුල් ගොනුව විවෘත කරන්න</span>
+              </a>
+
+              {previewSlip.status === 'pending' ? (
+                <div className="flex items-center gap-2">
+                  <button
+                    disabled={processingSlipId === previewSlip.id}
+                    onClick={() => handleRejectSlip(previewSlip)}
+                    className="px-4 py-2.5 rounded-xl bg-red-600/10 border border-red-500/30 hover:bg-red-600 hover:text-white text-red-400 text-xs font-bold transition cursor-pointer"
+                  >
+                    ප්‍රතික්ෂේප කරන්න
+                  </button>
+                  <button
+                    disabled={processingSlipId === previewSlip.id}
+                    onClick={() => handleApproveSlip(previewSlip)}
+                    className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition shadow-lg shadow-emerald-600/20 cursor-pointer"
+                  >
+                    {processingSlipId === previewSlip.id ? 'Approve වෙමින්...' : '✅ Approve (මාසය සක්‍රිය)'}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  disabled={processingSlipId === previewSlip.id}
+                  onClick={() => handleDeleteSlip(previewSlip)}
+                  className="px-4 py-2.5 rounded-xl bg-red-600/20 hover:bg-red-600 text-red-300 hover:text-white border border-red-500/30 text-xs font-bold transition cursor-pointer flex items-center gap-1.5"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>මෙම රිසිට්පත Delete කරන්න</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 📝 MODAL: GRADING & SUBMISSIONS VIEWER */}
       {gradingModalAssignment && (
@@ -2768,74 +2883,6 @@ Learn ICT with Mano`;
                 </div>
               </div>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: PREVIEW SLIP */}
-      {previewSlip && (
-        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-[#0c1322] border border-slate-800 max-w-2xl w-full rounded-3xl p-6 space-y-5 shadow-2xl relative max-h-[90vh] overflow-y-auto">
-            <button
-              onClick={() => setPreviewSlip(null)}
-              className="absolute right-5 top-5 p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-
-            <div className="flex items-center justify-between pr-8">
-              <div>
-                <h3 className="text-base font-bold text-white flex items-center gap-2">
-                  <CreditCard className="w-4 h-4 text-purple-400" />
-                  බැංකු රිසිට්පත් පරීක්ෂාව
-                </h3>
-                <p className="text-xs text-slate-400">
-                  {previewSlip.studentName} (@{previewSlip.studentUsername}) • {previewSlip.course_name}
-                </p>
-              </div>
-              <span className="font-mono font-bold text-emerald-400 text-sm">
-                Rs. {previewSlip.amount}/-
-              </span>
-            </div>
-
-            <div className="rounded-2xl border border-slate-800 overflow-hidden bg-slate-950 flex items-center justify-center max-h-[60vh]">
-              <img
-                src={previewSlip.slip_url}
-                alt="Full Slip Preview"
-                className="w-full h-auto max-h-[60vh] object-contain"
-              />
-            </div>
-
-            <div className="flex items-center justify-between gap-3 pt-2">
-              <a
-                href={previewSlip.slip_url}
-                target="_blank"
-                rel="noreferrer"
-                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span>මුල් ගොනුව විවෘත කරන්න</span>
-              </a>
-
-              {previewSlip.status === 'pending' && (
-                <div className="flex items-center gap-2">
-                  <button
-                    disabled={processingSlipId === previewSlip.id}
-                    onClick={() => handleRejectSlip(previewSlip)}
-                    className="px-4 py-2.5 rounded-xl bg-red-600/10 border border-red-500/30 hover:bg-red-600 hover:text-white text-red-400 text-xs font-bold transition cursor-pointer"
-                  >
-                    ප්‍රතික්ෂේප කරන්න
-                  </button>
-                  <button
-                    disabled={processingSlipId === previewSlip.id}
-                    onClick={() => handleApproveSlip(previewSlip)}
-                    className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition shadow-lg shadow-emerald-600/20 cursor-pointer"
-                  >
-                    {processingSlipId === previewSlip.id ? 'Approve වෙමින්...' : '✅ Approve (මාසය සක්‍රිය)'}
-                  </button>
-                </div>
-              )}
-            </div>
           </div>
         </div>
       )}
