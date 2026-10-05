@@ -2,12 +2,13 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useRouter } from 'next/navigation';
 import { 
   BookOpen, Video, Users, Plus, Trash2, ArrowLeft, 
   Calendar, Clock, Film, PlayCircle,
   CheckCircle, AlertCircle, X, RefreshCw,
   Search, Unlock, Lock, PhoneCall, CreditCard, Eye, EyeOff, Copy, Check, ExternalLink, Sparkles,
-  FileText, UploadCloud, File, Award, Download, KeyRound, CheckCircle2, MessageSquare
+  FileText, UploadCloud, File, Award, Download, KeyRound, CheckCircle2, MessageSquare, ShieldAlert
 } from 'lucide-react';
 
 const Youtube = ({ className = "w-4 h-4" }: { className?: string }) => (
@@ -17,6 +18,12 @@ const Youtube = ({ className = "w-4 h-4" }: { className?: string }) => (
 );
 
 export default function AdminDashboard() {
+  const router = useRouter();
+
+  // Security & Auth Guard State
+  const [authChecking, setAuthChecking] = useState(true);
+  const [isAuthorizedAdmin, setIsAuthorizedAdmin] = useState(false);
+
   const [activeTab, setActiveTab] = useState<'courses' | 'students' | 'devices' | 'slips' | 'zoom'>('courses');
   const [studentSubTab, setStudentSubTab] = useState<'register' | 'list'>('list');
 
@@ -123,25 +130,69 @@ export default function AdminDashboard() {
   const [testingZoom, setTestingZoom] = useState(false);
   const [zoomStatusMessage, setZoomStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // 🛡️ STRICT AUTH & ROLE SECURITY GUARD
   useEffect(() => {
-    fetchCourses();
-    generateRandomPassword();
-  }, []);
+    const verifyAdminAccess = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+
+        if (!user) {
+          // If not logged in, bounce immediately to login
+          router.replace('/login');
+          return;
+        }
+
+        const userEmail = (user.email || '').toLowerCase();
+        const userRole = (user.user_metadata?.role || '').toLowerCase();
+        const userUsername = (user.user_metadata?.username || '').toLowerCase();
+
+        const isAdmin = 
+          userRole === 'admin' || 
+          userRole === 'teacher' || 
+          userUsername === 'admin' ||
+          userUsername === 'teacher' ||
+          userEmail === 'admin@learnict.lk' ||
+          userEmail === 'mano.ict@gmail.com' ||
+          (userEmail.includes('admin') && !userEmail.includes('@student.')) ||
+          (userEmail.includes('teacher') && !userEmail.includes('@student.'));
+
+        if (!isAdmin) {
+          // A student or unauthorized user attempted to access /admin/dashboard directly!
+          alert('Access Denied: You do not have administrative privileges.');
+          router.replace('/student/dashboard');
+          return;
+        }
+
+        setIsAuthorizedAdmin(true);
+        fetchCourses();
+        generateRandomPassword();
+      } catch (err) {
+        console.error(err);
+        router.replace('/login');
+      } finally {
+        setAuthChecking(false);
+      }
+    };
+
+    verifyAdminAccess();
+  }, [router]);
 
   useEffect(() => {
-    if (activeTab === 'students' && studentSubTab === 'list' && selectedFilterCourse) {
-      fetchStudentsForCourse(selectedFilterCourse);
+    if (isAuthorizedAdmin) {
+      if (activeTab === 'students' && studentSubTab === 'list' && selectedFilterCourse) {
+        fetchStudentsForCourse(selectedFilterCourse);
+      }
+      if (activeTab === 'devices') {
+        fetchDevicesData();
+      }
+      if (activeTab === 'slips') {
+        fetchSlipsData();
+      }
+      if (activeTab === 'zoom') {
+        fetchZoomSettings();
+      }
     }
-    if (activeTab === 'devices') {
-      fetchDevicesData();
-    }
-    if (activeTab === 'slips') {
-      fetchSlipsData();
-    }
-    if (activeTab === 'zoom') {
-      fetchZoomSettings();
-    }
-  }, [activeTab, studentSubTab, selectedFilterCourse]);
+  }, [activeTab, studentSubTab, selectedFilterCourse, isAuthorizedAdmin]);
 
   const fetchCourses = async () => {
     setLoadingCourses(true);
@@ -769,7 +820,7 @@ export default function AdminDashboard() {
       setAssignmentSubmissionsList(prev =>
         prev.map(s => (s.id === sub.id ? { ...s, marks: Number(enteredMarks), feedback: enteredFeedback, status: 'graded' } : s))
       );
-      setEditingSubId(null); // Lock automatically!
+      setEditingSubId(null);
     } catch (err: any) {
       alert('Error: ' + err.message);
     } finally {
@@ -1024,6 +1075,20 @@ Your account will automatically bind to the first device you log in with. Please
       slip.studentPhone?.includes(searchSlipQuery);
     return matchesFilter && matchesSearch;
   });
+
+  // 🛡️ Loading Screen while checking security permissions
+  if (authChecking) {
+    return (
+      <div className="min-h-screen bg-[#070b14] flex flex-col items-center justify-center text-white space-y-4 font-sans">
+        <RefreshCw className="w-8 h-8 text-purple-500 animate-spin" />
+        <p className="text-xs text-slate-400 font-mono tracking-wider">Verifying Admin Access Privileges...</p>
+      </div>
+    );
+  }
+
+  if (!isAuthorizedAdmin) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-[#070b14] text-white p-6 md:p-10 font-sans">
@@ -2736,7 +2801,7 @@ Your account will automatically bind to the first device you log in with. Please
         </div>
       )}
 
-      {/* 📝 MODAL: GRADING & SUBMISSIONS VIEWER (AUTO-LOCK IMPLEMENTATION) */}
+      {/* 📝 MODAL: GRADING & SUBMISSIONS VIEWER */}
       {gradingModalAssignment && (
         <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-[#0c1322] border border-slate-800 max-w-3xl w-full rounded-3xl p-6 sm:p-7 space-y-5 shadow-2xl relative max-h-[90vh] overflow-y-auto">
@@ -2834,7 +2899,6 @@ Your account will automatically bind to the first device you log in with. Please
                           </div>
                         </div>
 
-                        {/* 🔒 LOCKED VIEW: Once graded, lock inputs and display clean summary */}
                         {isGraded && !isEditing ? (
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl bg-[#0c1322] border border-slate-800/80">
                             <div className="flex flex-wrap items-center gap-4 text-xs">
@@ -2867,7 +2931,6 @@ Your account will automatically bind to the first device you log in with. Please
                             </div>
                           </div>
                         ) : (
-                          /* 📝 INPUT VIEW: Shown only when pending review OR when teacher explicitly clicked ✏️ Edit */
                           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-1">
                             <div className="flex items-center gap-2">
                               <label className="text-xs font-semibold text-slate-300 shrink-0">Marks:</label>

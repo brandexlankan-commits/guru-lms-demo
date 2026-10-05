@@ -3,13 +3,12 @@
 import React, { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { Lock, User, AlertCircle, ArrowRight, ShieldCheck, KeyRound, ShieldAlert } from 'lucide-react';
+import { Lock, User, AlertCircle, ArrowRight, ShieldCheck, KeyRound } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [identifier, setIdentifier] = useState(''); // Email or Username
+  const [identifier, setIdentifier] = useState(''); // Username or Email
   const [password, setPassword] = useState('');
-  const [loginRole, setLoginRole] = useState<'student' | 'teacher'>('student');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -21,89 +20,93 @@ export default function LoginPage() {
 
     try {
       const cleanInput = identifier.trim().toLowerCase();
-      let loginEmail = cleanInput;
+      let targetEmail = cleanInput;
 
-      // Detect if user is attempting teacher/admin login
-      const isTeacherIdentifier = 
-        loginRole === 'teacher' || 
-        cleanInput === 'admin' || 
-        cleanInput === 'teacher' || 
-        cleanInput.includes('admin') || 
-        cleanInput.includes('teacher');
-
+      // 1. If user typed a username without @, resolve exact email via backend
       if (!cleanInput.includes('@')) {
-        if (isTeacherIdentifier) {
-          // If teacher username typed without @
-          loginEmail = cleanInput === 'admin' ? 'admin@learnict.lk' : `${cleanInput}@learnict.lk`;
-        } else {
-          loginEmail = `${cleanInput}@student.learnict.lk`;
+        try {
+          const res = await fetch(`/api/auth/resolve-email?identifier=${encodeURIComponent(cleanInput)}`);
+          const data = await res.json();
+          if (res.ok && data.email) {
+            targetEmail = data.email;
+          } else {
+            targetEmail = `${cleanInput}@gmail.com`;
+          }
+        } catch {
+          targetEmail = `${cleanInput}@gmail.com`;
         }
       }
 
-      // 1. Authenticate with Supabase Auth
-      let authResult = await supabase.auth.signInWithPassword({
-        email: loginEmail,
+      // 2. Authenticate with Supabase Auth
+      let { data, error } = await supabase.auth.signInWithPassword({
+        email: targetEmail,
         password: password,
       });
 
-      // Fallback: If custom email domain failed for teacher, try raw email if input had @
-      if (authResult.error && isTeacherIdentifier && !cleanInput.includes('@')) {
-        authResult = await supabase.auth.signInWithPassword({
-          email: `${cleanInput}@gmail.com`,
+      // Fallback try with @learnict.lk if first attempt failed and input was plain username
+      if (error && !cleanInput.includes('@')) {
+        const fallbackRes = await supabase.auth.signInWithPassword({
+          email: `${cleanInput}@learnict.lk`,
           password: password,
         });
+        if (!fallbackRes.error && fallbackRes.data.user) {
+          data = fallbackRes.data;
+          error = null;
+        }
       }
 
-      if (authResult.error) {
+      if (error) {
         throw new Error('Invalid username or password. Please verify your credentials.');
       }
 
-      const user = authResult.data.user;
-      if (!user) {
+      if (!data.user) {
         throw new Error('User authentication failed.');
       }
 
+      const user = data.user;
       const userEmail = (user.email || '').toLowerCase();
-      const userMetaRole = (user.user_metadata?.role || '').toLowerCase();
-      const userMetaUsername = (user.user_metadata?.username || '').toLowerCase();
+      const userRole = (user.user_metadata?.role || '').toLowerCase();
+      const userUsername = (user.user_metadata?.username || '').toLowerCase();
 
-      // 2. Strict Check for Admin / Teacher
-      const isActuallyAdmin = 
-        loginRole === 'teacher' ||
-        isTeacherIdentifier ||
-        userMetaRole === 'admin' || 
-        userMetaRole === 'teacher' || 
-        userMetaUsername === 'admin' ||
-        userMetaUsername === 'teacher' ||
-        userEmail.includes('admin') || 
-        userEmail.includes('teacher') ||
+      // 3. Auto-detect Role: Is this Teacher/Admin?
+      const isAdmin = 
+        userRole === 'admin' || 
+        userRole === 'teacher' || 
+        userUsername === 'admin' ||
+        userUsername === 'teacher' ||
+        userEmail === 'admin@learnict.lk' ||
         userEmail === 'mano.ict@gmail.com' ||
-        (userEmail.endsWith('@learnict.lk') && !userEmail.includes('@student.'));
+        (userEmail.includes('admin') && !userEmail.includes('@student.')) ||
+        (userEmail.includes('teacher') && !userEmail.includes('@student.'));
 
-      if (isActuallyAdmin) {
-        // Force redirect to Admin Dashboard
+      if (isAdmin) {
+        // Teacher / Admin direct redirect
         window.location.href = '/admin/dashboard';
         return;
       }
 
-      // 3. Device Locking Check for Students ONLY
+      // 4. Student Device Locking Check
       const currentDeviceId = localStorage.getItem('guru_device_token') || crypto.randomUUID();
       localStorage.setItem('guru_device_token', currentDeviceId);
 
       const registeredDeviceId = user.user_metadata?.device_id;
 
       if (!registeredDeviceId) {
-        await fetch('/api/verify-device', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: user.id, deviceId: currentDeviceId }),
-        });
+        try {
+          await fetch('/api/verify-device', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: user.id, deviceId: currentDeviceId }),
+          });
+        } catch (devErr) {
+          console.error('Device registration note:', devErr);
+        }
       } else if (registeredDeviceId !== currentDeviceId) {
         await supabase.auth.signOut();
-        throw new Error('Your account is registered to another device. Please contact teacher to unlock.');
+        throw new Error('Your account is locked to another device. Please contact your teacher to reset.');
       }
 
-      // Redirect Student
+      // Student direct redirect
       window.location.href = '/student/dashboard';
 
     } catch (err: any) {
@@ -136,38 +139,16 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Login Box */}
-        <div className="bg-[#0c1322] border border-slate-800/90 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-5 relative overflow-hidden">
+        {/* Unified Login Box (No Tabs) */}
+        <div className="bg-[#0c1322] border border-slate-800/90 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 relative overflow-hidden">
           
-          {/* Role Selector Tabs (Student vs Teacher) */}
-          <div className="flex rounded-xl bg-[#131c31] p-1 border border-slate-800">
-            <button
-              type="button"
-              onClick={() => { setLoginRole('student'); setErrorMsg(''); }}
-              className={`flex-1 py-2 text-xs font-bold rounded-lg transition cursor-pointer ${
-                loginRole === 'student' ? 'bg-purple-600 text-white shadow' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              👨‍🎓 Student Portal
-            </button>
-            <button
-              type="button"
-              onClick={() => { setLoginRole('teacher'); setErrorMsg(''); }}
-              className={`flex-1 py-2 text-xs font-bold rounded-lg transition cursor-pointer ${
-                loginRole === 'teacher' ? 'bg-purple-600 text-white shadow' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              👨‍🏫 Teacher / Admin
-            </button>
-          </div>
-
-          <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-            <h2 className="text-xs font-bold text-white flex items-center gap-2">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+            <h2 className="text-sm font-bold text-white flex items-center gap-2">
               <KeyRound className="w-4 h-4 text-purple-400" />
-              <span>{loginRole === 'teacher' ? 'Admin Portal Sign In' : 'Student Sign In'}</span>
+              <span>Sign In to Your Account</span>
             </h2>
-            <span className="text-[10px] bg-purple-500/10 border border-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full font-bold">
-              {loginRole === 'teacher' ? 'Admin Gateway' : 'Single-Device Locked'}
+            <span className="text-[10px] bg-purple-500/10 border border-purple-500/20 text-purple-300 px-2.5 py-0.5 rounded-full font-bold">
+              Secure Gateway
             </span>
           </div>
 
@@ -181,14 +162,14 @@ export default function LoginPage() {
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                {loginRole === 'teacher' ? 'Teacher Email or Username *' : 'Student Username *'}
+                Username or Email Address *
               </label>
               <div className="relative">
                 <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
                 <input
                   type="text"
                   required
-                  placeholder={loginRole === 'teacher' ? 'e.g. teacher or teacher@gmail.com' : 'e.g. kasun482'}
+                  placeholder="Enter your username or email"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   className="w-full bg-[#131c31] border border-slate-700 rounded-xl pl-10 pr-4 py-3 text-xs text-white focus:outline-none focus:border-purple-500 transition font-mono"
@@ -218,7 +199,7 @@ export default function LoginPage() {
               disabled={loading}
               className="w-full py-3.5 bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-purple-600/30 transition duration-200 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer mt-2"
             >
-              <span>{loading ? 'Authenticating...' : loginRole === 'teacher' ? 'Sign In to Admin Hub' : 'Sign In to Student Portal'}</span>
+              <span>{loading ? 'Authenticating...' : 'Sign In'}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>
