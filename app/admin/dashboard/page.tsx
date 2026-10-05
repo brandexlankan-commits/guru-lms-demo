@@ -7,7 +7,7 @@ import {
   Calendar, Clock, Film, PlayCircle,
   CheckCircle, AlertCircle, X, RefreshCw,
   Search, Unlock, Lock, PhoneCall, CreditCard, Eye, EyeOff, Copy, Check, ExternalLink, Sparkles,
-  FileText, UploadCloud, File, Award, Download, KeyRound, CheckCircle2
+  FileText, UploadCloud, File, Award, Download, KeyRound, CheckCircle2, MessageSquare, Send
 } from 'lucide-react';
 
 const Youtube = ({ className = "w-4 h-4" }: { className?: string }) => (
@@ -18,7 +18,7 @@ const Youtube = ({ className = "w-4 h-4" }: { className?: string }) => (
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<'courses' | 'students' | 'devices' | 'slips' | 'zoom'>('courses');
-  const [studentSubTab, setStudentSubTab] = useState<'register' | 'list'>('register');
+  const [studentSubTab, setStudentSubTab] = useState<'register' | 'list'>('list');
 
   // Courses state
   const [courses, setCourses] = useState<any[]>([]);
@@ -83,8 +83,11 @@ export default function AdminDashboard() {
 
   // Class-wise Students List State
   const [studentsList, setStudentsList] = useState<any[]>([]);
+  const [currentMonthName, setCurrentMonthName] = useState('මෙම');
+  const [nextMonthName, setNextMonthName] = useState('ඊළඟ');
   const [loadingStudents, setLoadingStudents] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [paymentFilter, setPaymentFilter] = useState<'all' | 'paid' | 'unpaid'>('all');
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [showPasswordMap, setShowPasswordMap] = useState<{ [userId: string]: boolean }>({});
 
@@ -267,6 +270,7 @@ export default function AdminDashboard() {
       alert(data.message || 'රිසිට්පත සාර්ථකව අනුමත කරන ලදී!');
       if (previewSlip?.id === slip.id) setPreviewSlip(null);
       fetchSlipsData();
+      if (selectedFilterCourse) fetchStudentsForCourse(selectedFilterCourse);
     } catch (err: any) {
       alert('දෝෂයකි: ' + err.message);
     } finally {
@@ -684,6 +688,8 @@ export default function AdminDashboard() {
       const data = await res.json();
       if (res.ok) {
         setStudentsList(data.students || []);
+        if (data.currentMonthName) setCurrentMonthName(data.currentMonthName);
+        if (data.nextMonthName) setNextMonthName(data.nextMonthName);
       }
     } catch (e) {
       console.error(e);
@@ -762,9 +768,9 @@ export default function AdminDashboard() {
     }
   };
 
-  // 🗓️ මාසය සක්‍රිය කිරීම (Calendar Month Billing)
+  // 🗓️ මාසික පදනම අනුව සක්‍රිය කිරීම (Monthly Billing)
   const handleActivateMonth = async (student: any, targetMonth: 'current_month' | 'next_month') => {
-    const monthLabel = targetMonth === 'next_month' ? 'ඊළඟ මාසය' : 'මෙම මාසය';
+    const monthLabel = targetMonth === 'next_month' ? (student.nextMonthName || 'ඊළඟ මාසය') : (student.currentMonthName || 'මෙම මාසය');
     if (!confirm(`${student.fullName} සඳහා ${monthLabel} පන්ති ගාස්තු සක්‍රිය කිරීමට අවශ්‍යද?`)) return;
 
     setActionLoadingId(`month_${targetMonth}_${student.userId}`);
@@ -791,9 +797,9 @@ export default function AdminDashboard() {
     }
   };
 
-  // 🔓/⛔ Access On / Off (Active <-> Suspended) Toggle කිරීම
+  // 🔓/⛔ Access On / Off (Active <-> Inactive) Toggle කිරීම
   const handleToggleStatus = async (student: any) => {
-    const newStatus = student.status === 'active' ? 'suspended' : 'active';
+    const newStatus = student.status === 'active' ? 'inactive' : 'active';
     const actionLabel = newStatus === 'active' ? 'නැවත Access ලබාදීමට' : 'Access තාවකාලිකව අත්හිටුවීමට (Deactivate)';
 
     if (!confirm(`${student.fullName} ගේ ${actionLabel} අවශ්‍ය බව සහතිකද?`)) return;
@@ -813,7 +819,12 @@ export default function AdminDashboard() {
       if (!res.ok) throw new Error(data.error);
 
       setStudentsList(prev =>
-        prev.map(s => (s.userId === student.userId ? { ...s, status: newStatus } : s))
+        prev.map(s => (s.userId === student.userId ? { 
+          ...s, 
+          status: newStatus,
+          isPaidForCurrentMonth: newStatus === 'active' ? s.isPaidForCurrentMonth : false,
+          monthStatusText: newStatus === 'active' ? `${s.currentMonthName || 'මෙම'} මාසයට ගිණුම සක්‍රීයයි` : 'ප්‍රවේශය අත්හිටුවා ඇත (Suspended)'
+        } : s))
       );
     } catch (err: any) {
       alert('දෝෂයකි: ' + err.message);
@@ -852,6 +863,23 @@ export default function AdminDashboard() {
     setShowPasswordMap(prev => ({ ...prev, [userId]: !prev[userId] }));
   };
 
+  // 💬 WhatsApp Reminder Generator for Unpaid Students
+  const getWhatsAppReminderUrl = (student: any) => {
+    const currentCourse = courses.find(c => c.id.toString() === selectedFilterCourse);
+    const courseTitle = currentCourse ? currentCourse.title : 'ICT Class';
+    const cleanPhone = (student.phone || '').replace(/[^0-9]/g, '').replace(/^0/, '');
+
+    const message = `ආයුබෝවන් ${student.fullName},
+ඔබගේ "${courseTitle}" පන්තිය සඳහා වන ${currentMonthName} මාසයේ පන්ති ගාස්තු මෙතෙක් ලැබී නොමැත.
+
+පන්ති පටිගත කිරීම් (Recordings) සහ පාඩම් සටහන් බාධාවකින් තොරව ලබාගැනීමට කරුණාකර පන්ති ගාස්තු ගෙවා ඔබගේ බැංකු රිසිට්පත Student Portal එකට (https://guru-lms-demo.vercel.app/login) Upload කිරීමට කාරුණික වන්න.
+
+ස්තූතියි!
+Learn ICT with Mano`;
+
+    return `https://wa.me/94${cleanPhone}?text=${encodeURIComponent(message)}`;
+  };
+
   const generateWhatsAppMessage = () => {
     if (!createdStudentData) return '';
     return `ආයුබෝවන් ${createdStudentData.fullName},
@@ -866,11 +894,23 @@ export default function AdminDashboard() {
 ඔබ පළමුව Login වන උපාංගයට ඔබගේ ගිණුම ස්වයංක්‍රීයව ලොක් වේ. එබැවින් ඔබේ පෞද්ගලික උපාංගයෙන් පමණක් Login වන්න.`;
   };
 
-  const filteredStudents = studentsList.filter(s =>
-    s.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    s.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    s.phone.includes(searchQuery)
-  );
+  // Filter students by Search Query and Payment Status (All / Paid / Unpaid)
+  const filteredStudents = studentsList.filter(s => {
+    const matchesSearch =
+      s.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.phone.includes(searchQuery);
+
+    if (!matchesSearch) return false;
+
+    if (paymentFilter === 'paid') return s.isPaidForCurrentMonth;
+    if (paymentFilter === 'unpaid') return !s.isPaidForCurrentMonth;
+    return true;
+  });
+
+  const totalCount = studentsList.length;
+  const paidCount = studentsList.filter(s => s.isPaidForCurrentMonth).length;
+  const unpaidCount = studentsList.filter(s => !s.isPaidForCurrentMonth).length;
 
   const filteredDevices = devicesList.filter(d =>
     d.fullName.toLowerCase().includes(searchDeviceQuery.toLowerCase()) ||
@@ -976,9 +1016,6 @@ export default function AdminDashboard() {
                 <div>
                   <h2 className="text-lg font-bold text-white flex items-center gap-2">
                     Zoom Account කළමනාකරණය
-                    <span className="px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-bold uppercase tracking-wider">
-                      Auto-Schedule Gateway
-                    </span>
                   </h2>
                   <p className="text-xs text-slate-400">
                     ඔබගේ Zoom Pro / Business එකවුන්ට් එක මාරු වූ විට අලුත් Credentials මෙතැනින් Save කරන්න.
@@ -1178,7 +1215,6 @@ export default function AdminDashboard() {
                                 <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-purple-400" /> {courseLiveClass.time}</span>
                               </div>
 
-                              {/* Host Start Class Button */}
                               <div className="pt-2">
                                 <a
                                   href={`/api/zoom/start?meetingId=${courseLiveClass.meeting_id || courseLiveClass.zoom_join_url?.split('meetingId=')[1]?.split('&')[0]}`}
@@ -1337,7 +1373,7 @@ export default function AdminDashboard() {
                                     className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition cursor-pointer shrink-0"
                                     title="Recording එක මකන්න"
                                   >
-                                    <Trash2 className="w-3.5 h-3.5" />
+                                    <Trash2 className="w-4 h-4" />
                                   </button>
                                 </div>
                               ))
@@ -1398,7 +1434,7 @@ export default function AdminDashboard() {
                               className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl text-xs transition shadow-lg shadow-emerald-600/20 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
                             >
                               <UploadCloud className="w-4 h-4" />
-                              <span>{savingMaterial ? 'ගොනුව Upload වෙමින් පවතී...' : '+ මෙම ටියූට් එක పන්තියට එක් කරන්න'}</span>
+                              <span>{savingMaterial ? 'ගොනුව Upload වෙමින් පවතී...' : '+ මෙම ටියූට් එක පන්තියට එක් කරන්න'}</span>
                             </button>
                           </form>
                         </div>
@@ -1690,20 +1726,20 @@ export default function AdminDashboard() {
           <div className="space-y-6">
             <div className="flex border-b border-slate-800 gap-4">
               <button
-                onClick={() => setStudentSubTab('register')}
-                className={`pb-3 text-sm font-semibold transition border-b-2 cursor-pointer ${
-                  studentSubTab === 'register' ? 'border-purple-500 text-purple-400' : 'border-transparent text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                ➕ නව ශිෂ්‍ය ලියාපදිංචිය (Registration)
-              </button>
-              <button
                 onClick={() => setStudentSubTab('list')}
                 className={`pb-3 text-sm font-semibold transition border-b-2 cursor-pointer ${
                   studentSubTab === 'list' ? 'border-purple-500 text-purple-400' : 'border-transparent text-slate-400 hover:text-slate-200'
                 }`}
               >
                 📋 පන්ති අනුව සිසුන් ලැයිස්තුව (Class-wise Students)
+              </button>
+              <button
+                onClick={() => setStudentSubTab('register')}
+                className={`pb-3 text-sm font-semibold transition border-b-2 cursor-pointer ${
+                  studentSubTab === 'register' ? 'border-purple-500 text-purple-400' : 'border-transparent text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                ➕ නව ශිෂ්‍ය ලියාපදිංචිය (Registration)
               </button>
             </div>
 
@@ -1851,6 +1887,7 @@ export default function AdminDashboard() {
 
             {studentSubTab === 'list' && (
               <div className="space-y-6">
+                {/* Course Switcher Pills */}
                 <div className="flex flex-wrap items-center gap-2 bg-[#0c1322] p-2 rounded-2xl border border-slate-800">
                   {courses.map((course) => (
                     <button
@@ -1867,26 +1904,85 @@ export default function AdminDashboard() {
                   ))}
                 </div>
 
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-[#0c1322] p-4 rounded-2xl border border-slate-800">
-                  <div className="text-sm font-bold text-slate-200">
-                    සිසුන් සංඛ්‍යාව: <span className="text-purple-400 font-mono">{filteredStudents.length}</span>
+                {/* Filter and Search Bar with Paid/Unpaid Tabs */}
+                <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 bg-[#0c1322] p-4 rounded-2xl border border-slate-800 shadow-xl">
+                  {/* Quick Payment Status Filter Pills */}
+                  <div className="flex items-center gap-2 bg-[#131c31] p-1.5 rounded-xl border border-slate-800">
+                    <button
+                      onClick={() => setPaymentFilter('all')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                        paymentFilter === 'all'
+                          ? 'bg-purple-600 text-white shadow'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      👥 සියලු සිසුන් ({totalCount})
+                    </button>
+
+                    <button
+                      onClick={() => setPaymentFilter('paid')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                        paymentFilter === 'paid'
+                          ? 'bg-emerald-600 text-white shadow'
+                          : 'text-emerald-400/80 hover:text-emerald-300'
+                      }`}
+                    >
+                      <span>✅ {currentMonthName} ගෙවූ සිසුන්</span>
+                      <span className="px-1.5 py-0.2 rounded-full bg-emerald-950 text-emerald-300 text-[10px] font-bold">
+                        {paidCount}
+                      </span>
+                    </button>
+
+                    <button
+                      onClick={() => setPaymentFilter('unpaid')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                        paymentFilter === 'unpaid'
+                          ? 'bg-amber-500 text-slate-950 font-bold shadow'
+                          : 'text-amber-400/90 hover:text-amber-300'
+                      }`}
+                    >
+                      <span>⚠️️ {currentMonthName} නොගෙවූ සිසුන්</span>
+                      <span className="px-1.5 py-0.2 rounded-full bg-slate-900 text-amber-300 text-[10px] font-bold">
+                        {unpaidCount}
+                      </span>
+                    </button>
                   </div>
-                  <div className="w-full sm:w-72">
-                    <input
-                      type="text"
-                      placeholder="නම, Username හෝ Phone සොයන්න..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
-                    />
+
+                  {/* Search box & Refresh */}
+                  <div className="flex items-center gap-3">
+                    <div className="relative flex-1 sm:w-72">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                      <input
+                        type="text"
+                        placeholder="නම, Username හෝ Phone සොයන්න..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full bg-[#131c31] border border-slate-700 rounded-xl pl-9 pr-4 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
+                      />
+                    </div>
+                    <button
+                      onClick={() => selectedFilterCourse && fetchStudentsForCourse(selectedFilterCourse)}
+                      className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer"
+                      title="Refresh"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
 
+                {/* Students Table */}
                 <div className="bg-[#0c1322] border border-slate-800/80 rounded-2xl overflow-hidden shadow-xl">
                   {loadingStudents ? (
-                    <div className="p-12 text-center text-slate-400 text-sm">සිසුන්ගේ තොරතුරු ලබාගනිමින් පවතී...</div>
+                    <div className="p-16 text-center text-slate-400 text-sm">සිසුන්ගේ තොරතුරු ලබාගනිමින් පවතී...</div>
                   ) : filteredStudents.length === 0 ? (
-                    <div className="p-12 text-center text-slate-500 text-sm">මෙම පන්තියට තවමත් සිසුන් ලියාපදිංචි වී නොමැත.</div>
+                    <div className="p-16 text-center text-slate-500 text-sm space-y-2">
+                      <Users className="w-10 h-10 text-slate-700 mx-auto" />
+                      <div>
+                        {paymentFilter === 'unpaid'
+                          ? `විශිෂ්ටයි! ${currentMonthName} මාසය සඳහා ගාස්තු නොගෙවූ කිසිදු ශිෂ්‍යයෙකු නොමැත.`
+                          : 'මෙම වර්ගයට අදාළ සිසුන් කිසිවකු හමු නොවීය.'}
+                      </div>
+                    </div>
                   ) : (
                     <div className="overflow-x-auto">
                       <table className="w-full text-left text-xs text-slate-300">
@@ -1897,20 +1993,31 @@ export default function AdminDashboard() {
                             <th className="py-3.5 px-4">මුරපදය (Password)</th>
                             <th className="py-3.5 px-4">දුරකථන අංකය</th>
                             <th className="py-3.5 px-4">උපාංගය (Device)</th>
-                            <th className="py-3.5 px-4">වලංගු කාලය (Access Status)</th>
-                            <th className="py-3.5 px-4 text-center">ක්‍රියාමාර්ග (Actions)</th>
+                            <th className="py-3.5 px-4">මාසික ගෙවීම් තත්ත්වය ({currentMonthName})</th>
+                            <th className="py-3.5 px-4 text-center">ක්‍රියාමාර්ග (ACTIONS)</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800/60">
                           {filteredStudents.map((st) => {
                             const isPwdVisible = !!showPasswordMap[st.userId];
+                            const isSuspended = st.status === 'inactive' || st.status === 'suspended';
 
                             return (
-                              <tr key={st.userId} className="hover:bg-slate-800/30 transition">
-                                <td className="py-3.5 px-4 font-semibold text-white">{st.fullName}</td>
+                              <tr key={st.userId} className={`transition ${
+                                !st.isPaidForCurrentMonth ? 'bg-amber-950/10 hover:bg-amber-950/20' : 'hover:bg-slate-800/30'
+                              }`}>
+                                <td className="py-3.5 px-4 font-semibold text-white">
+                                  {st.fullName}
+                                  {!st.isPaidForCurrentMonth && (
+                                    <span className="ml-2 px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[9px] font-bold">
+                                      UNPAID
+                                    </span>
+                                  )}
+                                </td>
+
                                 <td className="py-3.5 px-4 font-mono text-purple-400">@{st.username}</td>
                                 
-                                {/* Password with Eye Toggle & Copy */}
+                                {/* Password with Eye & Copy */}
                                 <td className="py-3.5 px-4">
                                   <div className="inline-flex items-center gap-2 bg-[#0c1322] px-2.5 py-1 rounded-lg border border-slate-700/60 font-mono text-[11px]">
                                     <span className={isPwdVisible ? 'text-amber-300 font-bold' : 'text-slate-400'}>
@@ -1920,7 +2027,7 @@ export default function AdminDashboard() {
                                       <button
                                         type="button"
                                         onClick={() => togglePasswordVisibility(st.userId)}
-                                        className="text-slate-400 hover:text-white transition p-0.5"
+                                        className="text-slate-400 hover:text-white transition p-0.5 cursor-pointer"
                                         title={isPwdVisible ? 'මුරපදය සඟවන්න' : 'මුරපදය බලන්න'}
                                       >
                                         {isPwdVisible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
@@ -1931,7 +2038,7 @@ export default function AdminDashboard() {
                                           navigator.clipboard.writeText(st.password);
                                           alert(`@${st.username} ගේ Password එක Copy කරගන්නා ලදී!`);
                                         }}
-                                        className="text-slate-400 hover:text-emerald-400 transition p-0.5"
+                                        className="text-slate-400 hover:text-emerald-400 transition p-0.5 cursor-pointer"
                                         title="Password Copy කරන්න"
                                       >
                                         <Copy className="w-3.5 h-3.5" />
@@ -1946,7 +2053,7 @@ export default function AdminDashboard() {
                                       href={`https://wa.me/94${st.phone.replace(/^0/, '')}`}
                                       target="_blank"
                                       rel="noreferrer"
-                                      className="text-emerald-400 hover:underline flex items-center gap-1"
+                                      className="text-emerald-400 hover:underline flex items-center gap-1 font-mono"
                                     >
                                       💬 {st.phone}
                                     </a>
@@ -1967,59 +2074,79 @@ export default function AdminDashboard() {
                                   )}
                                 </td>
 
-                                {/* Valid Until / Status with Days Left */}
+                                {/* Monthly Status Display */}
                                 <td className="py-3.5 px-4">
                                   <div className="flex flex-col gap-1">
                                     <div className="flex items-center gap-1.5">
                                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                                        st.status === 'suspended'
+                                        isSuspended
                                           ? 'bg-red-500/20 text-red-400 border border-red-500/30'
-                                          : st.isExpired
-                                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                                          : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                          : st.isPaidForCurrentMonth
+                                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                          : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                                       }`}>
-                                        {st.status === 'suspended' ? '⛔ Deactivated' : st.isExpired ? '⏳ Expired' : '✅ Active'}
+                                        {isSuspended ? '⛔ Suspended' : st.isPaidForCurrentMonth ? '✅ Paid' : '⚠️ Unpaid'}
                                       </span>
                                     </div>
 
-                                    {st.validUntil && (
-                                      <span className="text-[11px] text-slate-400">
-                                        {st.isExpired 
-                                          ? `⚠️ දින ${Math.abs(st.daysRemaining)} කට පෙර අවසන් විය` 
-                                          : `⏳ තව දින ${st.daysRemaining} ක් ඇත`}
-                                      </span>
-                                    )}
+                                    <span className={`text-[11px] font-medium ${
+                                      isSuspended
+                                        ? 'text-red-400'
+                                        : st.isPaidForCurrentMonth
+                                        ? 'text-emerald-400'
+                                        : 'text-amber-400'
+                                    }`}>
+                                      {st.monthStatusText}
+                                    </span>
                                   </div>
                                 </td>
 
-                                {/* Flexible Actions: Month Billing & Toggle */}
+                                {/* Dynamic Monthly Actions & Reminders */}
                                 <td className="py-3.5 px-4">
                                   <div className="flex flex-wrap items-center justify-center gap-2">
+                                    {/* 💬 Quick WhatsApp Reminder (නොගෙවූ සිසුන්ට ඉතා වැදගත්) */}
+                                    {st.phone && (
+                                      <a
+                                        href={getWhatsAppReminderUrl(st)}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition flex items-center gap-1.5 cursor-pointer shadow ${
+                                          !st.isPaidForCurrentMonth
+                                            ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold animate-pulse'
+                                            : 'bg-emerald-950/40 hover:bg-emerald-600 hover:text-white text-emerald-400 border border-emerald-500/30'
+                                        }`}
+                                        title={`${st.fullName} ට ගාස්තු ගෙවීම සිහිපත් කර WhatsApp පණිවිඩයක් යවන්න`}
+                                      >
+                                        <MessageSquare className="w-3.5 h-3.5" />
+                                        <span>{!st.isPaidForCurrentMonth ? '💬 Reminder යවන්න' : 'WhatsApp'}</span>
+                                      </a>
+                                    )}
+
                                     {/* මෙම මාසය සක්‍රිය කිරීම */}
                                     <button
                                       disabled={actionLoadingId === `month_current_month_${st.userId}`}
                                       onClick={() => handleActivateMonth(st, 'current_month')}
                                       className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[11px] transition shadow cursor-pointer disabled:opacity-50"
-                                      title="මෙම මාසයේ අවසාන දින දක්වා සක්‍රිය කරන්න"
+                                      title={`${currentMonthName} මාසය සඳහා සක්‍රිය කරන්න`}
                                     >
-                                      {actionLoadingId === `month_current_month_${st.userId}` ? '...' : '🗓️ මෙම මාසය (+Active)'}
+                                      {actionLoadingId === `month_current_month_${st.userId}` ? '...' : `🗓️ ${currentMonthName} (+Active)`}
                                     </button>
 
                                     {/* ඊළඟ මාසය සක්‍රිය කිරීම */}
                                     <button
                                       disabled={actionLoadingId === `month_next_month_${st.userId}`}
                                       onClick={() => handleActivateMonth(st, 'next_month')}
-                                      className="px-2 py-1.5 rounded-lg bg-purple-600/30 hover:bg-purple-600 text-purple-200 hover:text-white border border-purple-500/30 font-semibold text-[11px] transition cursor-pointer disabled:opacity-50"
-                                      title="ඊළඟ මාසය දක්වා සක්‍රිය කරන්න"
+                                      className="px-2.5 py-1.5 rounded-lg bg-purple-600/30 hover:bg-purple-600 text-purple-200 hover:text-white border border-purple-500/30 font-semibold text-[11px] transition cursor-pointer disabled:opacity-50"
+                                      title={`${nextMonthName} මාසය දක්වා සක්‍රිය කරන්න`}
                                     >
-                                      {actionLoadingId === `month_next_month_${st.userId}` ? '...' : '+ ඊළඟ මාසය'}
+                                      {actionLoadingId === `month_next_month_${st.userId}` ? '...' : `+ ${nextMonthName}`}
                                     </button>
 
                                     {/* Access On/Off Toggle Button */}
                                     <button
                                       disabled={actionLoadingId === `status_${st.userId}`}
                                       onClick={() => handleToggleStatus(st)}
-                                      className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition border cursor-pointer disabled:opacity-50 ${
+                                      className={`px-2 py-1.5 rounded-lg text-[11px] font-semibold transition border cursor-pointer disabled:opacity-50 ${
                                         st.status === 'active'
                                           ? 'bg-red-500/10 hover:bg-red-600 hover:text-white text-red-400 border-red-500/30'
                                           : 'bg-emerald-500/10 hover:bg-emerald-600 hover:text-white text-emerald-400 border-emerald-500/30'
@@ -2133,7 +2260,7 @@ export default function AdminDashboard() {
                         <th className="py-3.5 px-4">දුරකථන අංකය</th>
                         <th className="py-3.5 px-4">Device Status</th>
                         <th className="py-3.5 px-4">Device Identifier</th>
-                        <th className="py-3.5 px-4 text-center">ක්‍රියාමාර්ගය (Action)</th>
+                        <th className="py-3.5 px-4 text-center">ක්‍‍රියාමාර්ගය (Action)</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/60">

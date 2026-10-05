@@ -9,7 +9,12 @@ function getAdminClient() {
   );
 }
 
-// GET: Fetch students enrolled in a specific course with monthly details & remaining days
+const MONTH_NAMES_SINHALA = [
+  'ජනවාරි', 'පෙබරවාරි', 'මාර්තු', 'අප්‍රේල්', 'මැයි', 'ජූනි',
+  'ජූලි', 'අගෝස්තු', 'සැප්තැම්බර්', 'ඔක්තෝබර්', 'නොවැම්බර්', 'දෙසැම්බර්'
+];
+
+// GET: Fetch students with monthly payment status & automatic tracking
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -39,18 +44,41 @@ export async function GET(req: Request) {
     });
 
     const now = new Date();
+    const currentMonthIdx = now.getMonth();
+    const currentYear = now.getFullYear();
+    const currentMonthName = MONTH_NAMES_SINHALA[currentMonthIdx];
+    const nextMonthName = MONTH_NAMES_SINHALA[(currentMonthIdx + 1) % 12];
 
     const students = (enrollments || []).map((e: any) => {
       const u = usersMap.get(e.user_id);
       const validUntilDate = e.valid_until ? new Date(e.valid_until) : null;
-      
-      let daysRemaining: number | null = null;
-      let isExpired = false;
+      const isManuallySuspended = e.status === 'inactive' || e.status === 'suspended';
 
-      if (validUntilDate) {
-        const diffTime = validUntilDate.getTime() - now.getTime();
-        daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        isExpired = daysRemaining <= 0;
+      let isPaidForCurrentMonth = false;
+      let monthStatusText = '';
+
+      if (isManuallySuspended) {
+        isPaidForCurrentMonth = false;
+        monthStatusText = 'ප්‍රවේශය අත්හිටුවා ඇත (Suspended)';
+      } else if (validUntilDate) {
+        const validYear = validUntilDate.getFullYear();
+        const validMonthIdx = validUntilDate.getMonth();
+        const validMonthName = MONTH_NAMES_SINHALA[validMonthIdx];
+
+        // Check if student's access covers current month or beyond
+        if (validYear > currentYear || (validYear === currentYear && validMonthIdx > currentMonthIdx)) {
+          isPaidForCurrentMonth = true;
+          monthStatusText = `${validMonthName} මාසය දක්වා සක්‍රීයයි`;
+        } else if (validYear === currentYear && validMonthIdx === currentMonthIdx) {
+          isPaidForCurrentMonth = true;
+          monthStatusText = `${currentMonthName} මාසයට ගිණුම සක්‍රීයයි`;
+        } else {
+          isPaidForCurrentMonth = false;
+          monthStatusText = `${currentMonthName} මාසයට ගෙවා නොමැත (Unpaid)`;
+        }
+      } else {
+        isPaidForCurrentMonth = false;
+        monthStatusText = `${currentMonthName} මාසයට ගෙවා නොමැත (Unpaid)`;
       }
 
       return {
@@ -63,26 +91,32 @@ export async function GET(req: Request) {
         deviceId: u?.user_metadata?.device_id || null,
         validUntil: e.valid_until,
         status: e.status || 'active',
-        daysRemaining,
-        isExpired,
+        isPaidForCurrentMonth,
+        monthStatusText,
+        currentMonthName,
+        nextMonthName,
       };
     });
 
-    return NextResponse.json({ students });
+    return NextResponse.json({ 
+      students,
+      currentMonthName,
+      nextMonthName,
+    });
   } catch (err: any) {
     console.error('Error fetching students:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
 
-// POST: Flexible Access Controls (Activate Month, Toggle Status, Reset Device)
+// POST: Flexible Access Controls
 export async function POST(req: Request) {
   try {
     const supabaseAdmin = getAdminClient();
     const body = await req.json();
     const { action, userId, enrollmentId, targetMonth, newStatus } = body;
 
-    // 1. Activate for a calendar month
+    // 1. Activate Calendar Month
     if (action === 'activate_month') {
       const now = new Date();
       let targetDate: Date;
@@ -104,15 +138,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, validUntil: newValidUntil, status: 'active' });
     }
 
-    // 2. Manual Toggle Access (Active <-> Suspended)
+    // 2. Toggle Status (Active <-> Inactive)
     if (action === 'toggle_status') {
+      const statusToSet = newStatus === 'active' ? 'active' : 'inactive';
       const { error } = await supabaseAdmin
         .from('course_enrollments')
-        .update({ status: newStatus })
+        .update({ status: statusToSet })
         .eq('id', enrollmentId);
 
       if (error) throw error;
-      return NextResponse.json({ success: true, status: newStatus });
+      return NextResponse.json({ success: true, status: statusToSet });
     }
 
     // 3. Reset Single Device
