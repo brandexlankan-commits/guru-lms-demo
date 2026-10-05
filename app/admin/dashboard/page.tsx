@@ -7,7 +7,7 @@ import {
   Calendar, Clock, Film, PlayCircle,
   CheckCircle, AlertCircle, X, RefreshCw,
   Search, Unlock, Lock, PhoneCall, CreditCard, Eye, EyeOff, Copy, Check, ExternalLink, Sparkles,
-  FileText, UploadCloud, File, Award, Download, KeyRound, CheckCircle2, MessageSquare, Send
+  FileText, UploadCloud, File, Award, Download, KeyRound, CheckCircle2, MessageSquare
 } from 'lucide-react';
 
 const Youtube = ({ className = "w-4 h-4" }: { className?: string }) => (
@@ -863,13 +863,16 @@ export default function AdminDashboard() {
     setShowPasswordMap(prev => ({ ...prev, [userId]: !prev[userId] }));
   };
 
-  // 💬 WhatsApp Reminder Generator for Unpaid Students
-  const getWhatsAppReminderUrl = (student: any) => {
-    const currentCourse = courses.find(c => c.id.toString() === selectedFilterCourse);
-    const courseTitle = currentCourse ? currentCourse.title : 'ICT Class';
+  // 💬 WhatsApp URL Generator (Unpaid අයට පමණක් Reminder Message එක යැවීම)
+  const getWhatsAppUrl = (student: any) => {
     const cleanPhone = (student.phone || '').replace(/[^0-9]/g, '').replace(/^0/, '');
+    
+    // ⚠️ ගාස්තු නොගෙවූ (Unpaid) සිසුවෙකු නම් පමණක් Reminder Text එක ඇතුළත් කිරීම
+    if (!student.isPaidForCurrentMonth) {
+      const currentCourse = courses.find(c => c.id.toString() === selectedFilterCourse);
+      const courseTitle = currentCourse ? currentCourse.title : 'ICT Class';
 
-    const message = `ආයුබෝවන් ${student.fullName},
+      const message = `ආයුබෝවන් ${student.fullName},
 ඔබගේ "${courseTitle}" පන්තිය සඳහා වන ${currentMonthName} මාසයේ පන්ති ගාස්තු මෙතෙක් ලැබී නොමැත.
 
 පන්ති පටිගත කිරීම් (Recordings) සහ පාඩම් සටහන් බාධාවකින් තොරව ලබාගැනීමට කරුණාකර පන්ති ගාස්තු ගෙවා ඔබගේ බැංකු රිසිට්පත Student Portal එකට (https://guru-lms-demo.vercel.app/login) Upload කිරීමට කාරුණික වන්න.
@@ -877,7 +880,11 @@ export default function AdminDashboard() {
 ස්තූතියි!
 Learn ICT with Mano`;
 
-    return `https://wa.me/94${cleanPhone}?text=${encodeURIComponent(message)}`;
+      return `https://wa.me/94${cleanPhone}?text=${encodeURIComponent(message)}`;
+    }
+
+    // ✅ ගාස්තු ගෙවා ඇති (Paid) සිසුවෙකු නම් කිසිදු Reminder Message එකක් නොමැතිව සාමාන්‍ය Chat එක පමණක් Open වීම
+    return `https://wa.me/94${cleanPhone}`;
   };
 
   const generateWhatsAppMessage = () => {
@@ -1941,7 +1948,7 @@ Learn ICT with Mano`;
                           : 'text-amber-400/90 hover:text-amber-300'
                       }`}
                     >
-                      <span>⚠️️ {currentMonthName} නොගෙවූ සිසුන්</span>
+                      <span>⚠ {currentMonthName} නොගෙවූ සිසුන්</span>
                       <span className="px-1.5 py-0.2 rounded-full bg-slate-900 text-amber-300 text-[10px] font-bold">
                         {unpaidCount}
                       </span>
@@ -2104,21 +2111,26 @@ Learn ICT with Mano`;
                                 {/* Dynamic Monthly Actions & Reminders */}
                                 <td className="py-3.5 px-4">
                                   <div className="flex flex-wrap items-center justify-center gap-2">
-                                    {/* 💬 Quick WhatsApp Reminder (නොගෙවූ සිසුන්ට ඉතා වැදගත්) */}
+                                    
+                                    {/* 💬 Smart WhatsApp Button */}
                                     {st.phone && (
                                       <a
-                                        href={getWhatsAppReminderUrl(st)}
+                                        href={getWhatsAppUrl(st)}
                                         target="_blank"
                                         rel="noreferrer"
                                         className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition flex items-center gap-1.5 cursor-pointer shadow ${
                                           !st.isPaidForCurrentMonth
                                             ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold animate-pulse'
-                                            : 'bg-emerald-950/40 hover:bg-emerald-600 hover:text-white text-emerald-400 border border-emerald-500/30'
+                                            : 'bg-slate-800 hover:bg-emerald-600 hover:text-white text-slate-300 border border-slate-700'
                                         }`}
-                                        title={`${st.fullName} ට ගාස්තු ගෙවීම සිහිපත් කර WhatsApp පණිවිඩයක් යවන්න`}
+                                        title={
+                                          !st.isPaidForCurrentMonth
+                                            ? `${st.fullName} ට ${currentMonthName} මාසයේ ගාස්තු ගෙවීම සිහිපත් කර WhatsApp පණිවිඩයක් යවන්න`
+                                            : `${st.fullName} සමඟ සාමාන්‍ය WhatsApp Chat එකක් විවෘත කරන්න (Reminder පණිවිඩ නොමැත)`
+                                        }
                                       >
                                         <MessageSquare className="w-3.5 h-3.5" />
-                                        <span>{!st.isPaidForCurrentMonth ? '💬 Reminder යවන්න' : 'WhatsApp'}</span>
+                                        <span>{!st.isPaidForCurrentMonth ? '💬 Reminder යවන්න' : '💬 WhatsApp Chat'}</span>
                                       </a>
                                     )}
 
@@ -2260,7 +2272,7 @@ Learn ICT with Mano`;
                         <th className="py-3.5 px-4">දුරකථන අංකය</th>
                         <th className="py-3.5 px-4">Device Status</th>
                         <th className="py-3.5 px-4">Device Identifier</th>
-                        <th className="py-3.5 px-4 text-center">ක්‍‍රියාමාර්ගය (Action)</th>
+                        <th className="py-3.5 px-4 text-center">ක්‍රියාමාර්ගය (Action)</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/60">
