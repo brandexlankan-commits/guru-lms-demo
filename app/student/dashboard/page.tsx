@@ -4,9 +4,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { 
-  Video, PlayCircle, Lock, ShieldAlert, Film, Clock, 
-  Calendar, CheckCircle, Smartphone, ExternalLink, Sparkles,
-  FileText, Download, Award, UploadCloud, Check, AlertCircle, File,
+  Video, PlayCircle, Film, Clock, 
+  Calendar, CheckCircle, ExternalLink,
+  FileText, Download, Award, UploadCloud, AlertCircle,
   LogOut, Maximize, Minimize
 } from 'lucide-react';
 
@@ -124,7 +124,7 @@ export default function StudentDashboard() {
         setActiveRecording(null);
       }
 
-      // 3. Fetch Tutes / Materials
+      // 3. Fetch Tutes / Materials (Dual-table fetch)
       let matsData: any[] = [];
       const { data: mats } = await supabase
         .from('course_materials')
@@ -272,7 +272,7 @@ export default function StudentDashboard() {
           </button>
         </div>
 
-        {/* Course Pills and Desktop Logout Button */}
+        {/* Course Navigation and Desktop Logout Button */}
         <div className="flex flex-wrap items-center justify-between sm:justify-end gap-2.5 w-full sm:w-auto">
           <div className="flex flex-wrap gap-2">
             {courses.map((c) => (
@@ -415,7 +415,6 @@ export default function StudentDashboard() {
                     </span>
                   </div>
 
-                  {/* Secure Fullscreen Toggle Button */}
                   {activeRecording && (
                     <button
                       onClick={toggleFullScreen}
@@ -430,7 +429,7 @@ export default function StudentDashboard() {
 
                 <div 
                   ref={playerContainerRef}
-                  className="relative aspect-video w-full rounded-2xl bg-black border border-slate-800 overflow-hidden shadow-2xl flex items-center justify-center"
+                  className="relative aspect-video w-full rounded-2xl bg-black border border-slate-800 overflow-hidden shadow-2xl flex items-center justify-center group"
                   onContextMenu={(e) => e.preventDefault()}
                 >
                   {activeRecording ? (
@@ -442,32 +441,43 @@ export default function StudentDashboard() {
                         className="w-full h-full border-0"
                       />
 
-                      {/* 🛡️ ULTRA-WIDE ANTI-CLICK SHIELDS */}
-                      {/* 1. Top Shield: Title, Channel Avatar, Share Button සම්පූර්ණයෙන්ම Block කිරීම */}
+                      {/* 1. Fullscreen Exit Floating Button */}
+                      {isFullscreen && (
+                        <button
+                          type="button"
+                          onClick={toggleFullScreen}
+                          className="absolute top-4 right-4 z-40 px-3.5 py-2 rounded-xl bg-black/85 hover:bg-purple-600 text-white text-xs font-bold flex items-center gap-1.5 border border-white/20 shadow-2xl backdrop-blur-md cursor-pointer transition transform hover:scale-105"
+                        >
+                          <Minimize className="w-4 h-4 text-purple-300" />
+                          <span>Exit Fullscreen (කුඩා කරන්න)</span>
+                        </button>
+                      )}
+
+                      {/* 2. Top-Shield: Blocks Title & Channel while leaving right-32 free for Settings Gear */}
                       <div 
-                        className="absolute top-0 left-0 right-0 h-20 z-20 bg-transparent cursor-default pointer-events-auto" 
+                        className="absolute top-0 left-0 right-32 h-16 z-20 bg-transparent cursor-default pointer-events-auto" 
                         onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
                         onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
                         onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); }}
                       />
 
-                      {/* 2. Bottom-Left Shield: Mobile Copy Link අයිකනය (🔗) Block කිරීම */}
+                      {/* 3. Bottom-Left Mobile Shield: Mobile Link Copy Icon Blocked */}
                       <div 
-                        className="absolute bottom-0 left-0 w-36 h-16 z-20 bg-transparent cursor-default pointer-events-auto"
+                        className="md:hidden absolute bottom-1 left-1 w-20 h-16 z-20 bg-transparent cursor-default pointer-events-auto"
                         onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
                         onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
                         onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); }}
                       />
 
-                      {/* 3. Bottom-Right Shield: "Watch on YouTube" badge එක සහ YouTube Icon එක සම්පූර්ණයෙන්ම ආවරණය වන පරිදි (W-72 / 288px පළල) */}
+                      {/* 4. Bottom-Right Shield: "Watch on YouTube" Blocked */}
                       <div 
-                        className="absolute bottom-0 right-0 w-72 h-16 z-20 bg-transparent cursor-default pointer-events-auto"
+                        className="absolute bottom-0 right-0 w-60 h-14 z-20 bg-transparent cursor-default pointer-events-auto"
                         onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
                         onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
                         onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); }}
                       />
 
-                      {/* 💧 FAINT & ULTRA-TRANSLUCENT WATERMARK (කළු කොටු නොමැතිව අකුරු නොවැසෙන පරිදි) */}
+                      {/* 5. Ultra-Translucent Faint Watermark */}
                       <div 
                         className="absolute z-30 pointer-events-none transition-all duration-1000 ease-in-out select-none"
                         style={{ top: watermarkPos.top, left: watermarkPos.left }}
@@ -553,7 +563,7 @@ export default function StudentDashboard() {
 
             {materials.length === 0 ? (
               <div className="p-16 rounded-xl bg-slate-900/30 border border-dashed border-slate-800 text-center space-y-2">
-                <File className="w-10 h-10 text-slate-600 mx-auto" />
+                <FileText className="w-10 h-10 text-slate-600 mx-auto" />
                 <h4 className="text-sm font-semibold text-slate-300">තවමත් නිබන්ධන එක් කර නොමැත</h4>
                 <p className="text-xs text-slate-500">ගුරුතුමා විසින් නිබන්ධන upload කළ සැනින් මෙහි දිස්වනු ඇත.</p>
               </div>
