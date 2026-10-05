@@ -1,2560 +1,737 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useRouter } from 'next/navigation';
 import { 
-  BookOpen, Video, Users, Plus, Trash2, ArrowLeft, 
-  Calendar, Clock, Film, PlayCircle,
-  CheckCircle, AlertCircle, X, RefreshCw,
-  Search, Unlock, Lock, PhoneCall, CreditCard, Eye, EyeOff, Copy, Check, ExternalLink, Sparkles,
-  FileText, UploadCloud, File, Award, Download, KeyRound, CheckCircle2, MessageSquare
+  Video, PlayCircle, Film, Clock, 
+  Calendar, CheckCircle, ExternalLink,
+  FileText, Download, Award, UploadCloud, AlertCircle,
+  LogOut, Maximize, Minimize, CreditCard, X, Check
 } from 'lucide-react';
 
-const Youtube = ({ className = "w-4 h-4" }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-    <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
-  </svg>
-);
+export default function StudentDashboard() {
+  const router = useRouter();
+  const playerContainerRef = useRef<HTMLDivElement>(null);
 
-export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState<'courses' | 'students' | 'devices' | 'slips' | 'zoom'>('courses');
-  const [studentSubTab, setStudentSubTab] = useState<'register' | 'list'>('list');
-
-  // Courses state
+  const [currentUser, setCurrentUser] = useState<any>(null);
   const [courses, setCourses] = useState<any[]>([]);
-  const [loadingCourses, setLoadingCourses] = useState(false);
-  const [selectedFilterCourse, setSelectedFilterCourse] = useState<string>('');
+  const [activeCourse, setActiveCourse] = useState<any | null>(null);
 
-  // Course Hub Management States
-  const [selectedCourseForManage, setSelectedCourseForManage] = useState<any | null>(null);
-  const [courseSectionTab, setCourseSectionTab] = useState<'live_recordings' | 'materials' | 'assignments'>('live_recordings');
-  const [courseLiveClass, setCourseLiveClass] = useState<any | null>(null);
-  const [courseRecordings, setCourseRecordings] = useState<any[]>([]);
-  const [courseMaterials, setCourseMaterials] = useState<any[]>([]);
-  const [courseAssignments, setCourseAssignments] = useState<any[]>([]);
-  const [courseStudentCount, setCourseStudentCount] = useState<number>(0);
-  const [loadingManageDetails, setLoadingManageDetails] = useState<boolean>(false);
+  // Active Main Tab: Videos / Materials / Assignments
+  const [activeTab, setActiveTab] = useState<'videos' | 'materials' | 'assignments'>('videos');
 
-  // Assignment Submissions & Grading Modal State
-  const [gradingModalAssignment, setGradingModalAssignment] = useState<any | null>(null);
-  const [assignmentSubmissionsList, setAssignmentSubmissionsList] = useState<any[]>([]);
-  const [loadingSubmissions, setLoadingSubmissions] = useState<boolean>(false);
-  const [savingMarksId, setSavingMarksId] = useState<string | null>(null);
-  const [marksInputMap, setMarksInputMap] = useState<{ [subId: string]: string }>({});
-  const [feedbackInputMap, setFeedbackInputMap] = useState<{ [subId: string]: string }>({});
+  // Course Data States
+  const [liveClass, setLiveClass] = useState<any | null>(null);
+  const [recordings, setRecordings] = useState<any[]>([]);
+  const [activeRecording, setActiveRecording] = useState<any | null>(null);
+  const [materials, setMaterials] = useState<any[]>([]);
+  const [assignments, setAssignments] = useState<any[]>([]);
+  const [submissions, setSubmissions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Add Course Modal State
-  const [showAddCourseModal, setShowAddCourseModal] = useState(false);
-  const [newCourseTitle, setNewCourseTitle] = useState('');
-  const [newCourseCategory, setNewCourseCategory] = useState('Grade 8 ICT');
-  const [newCourseType, setNewCourseType] = useState('Theory');
-  const [newCourseFee, setNewCourseFee] = useState('1500');
-  const [creatingCourse, setCreatingCourse] = useState(false);
+  // Fullscreen state
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // Live Class form states
-  const [schedTitle, setSchedTitle] = useState('');
-  const [schedDate, setSchedDate] = useState('');
-  const [schedTime, setSchedTime] = useState('19:00');
-  const [savingLiveClass, setSavingLiveClass] = useState(false);
+  // Student Assignment Submission State
+  const [submittingAssignId, setSubmittingAssignId] = useState<string | null>(null);
+  const [submissionFile, setSubmissionFile] = useState<File | null>(null);
+  const [uploadingSubmission, setUploadingSubmission] = useState(false);
 
-  // YouTube Recordings form states
-  const [recTitle, setRecTitle] = useState('');
-  const [recDate, setRecDate] = useState('');
-  const [recDuration, setRecDuration] = useState('2h 00m');
-  const [recYoutubeUrl, setRecYoutubeUrl] = useState('');
-  const [savingRecording, setSavingRecording] = useState(false);
+  // Bank Slip Upload Modal State
+  const [showSlipModal, setShowSlipModal] = useState(false);
+  const [slipFile, setSlipFile] = useState<File | null>(null);
+  const [slipAmount, setSlipAmount] = useState('');
+  const [uploadingSlip, setUploadingSlip] = useState(false);
+  const [slipSuccessMsg, setSlipSuccessMsg] = useState(false);
 
-  // Tutes / Study Materials Form State
-  const [matTitle, setMatTitle] = useState('');
-  const [matDesc, setMatDesc] = useState('');
-  const [matFile, setMatFile] = useState<File | null>(null);
-  const [savingMaterial, setSavingMaterial] = useState(false);
-
-  // Assignments Form State
-  const [assignTitle, setAssignTitle] = useState('');
-  const [assignDesc, setAssignDesc] = useState('');
-  const [assignDueDate, setAssignDueDate] = useState('');
-  const [assignDueTime, setAssignDueTime] = useState('23:59');
-  const [assignMarks, setAssignMarks] = useState('100');
-  const [assignFile, setAssignFile] = useState<File | null>(null);
-  const [savingAssignment, setSavingAssignment] = useState(false);
-
-  // Add Student Form State
-  const [fullName, setFullName] = useState('');
-  const [username, setUsername] = useState('');
-  const [phone, setPhone] = useState('');
-  const [password, setPassword] = useState('');
-  const [selectedCourses, setSelectedCourses] = useState<string[]>([]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formError, setFormError] = useState('');
-  const [createdStudentData, setCreatedStudentData] = useState<any>(null);
-
-  // Class-wise Students List State
-  const [studentsList, setStudentsList] = useState<any[]>([]);
-  const [currentMonthName, setCurrentMonthName] = useState('මෙම');
-  const [nextMonthName, setNextMonthName] = useState('ඊළඟ');
-  const [loadingStudents, setLoadingStudents] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [paymentFilter, setPaymentFilter] = useState<'all' | 'paid' | 'unpaid'>('all');
-  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
-  const [showPasswordMap, setShowPasswordMap] = useState<{ [userId: string]: boolean }>({});
-
-  // Devices Hub State
-  const [deviceStats, setDeviceStats] = useState({ totalStudents: 0, lockedCount: 0, unlockedCount: 0 });
-  const [devicesList, setDevicesList] = useState<any[]>([]);
-  const [loadingDevices, setLoadingDevices] = useState(false);
-  const [searchDeviceQuery, setSearchDeviceQuery] = useState('');
-
-  // Slip Approvals State
-  const [slipStats, setSlipStats] = useState({ total: 0, pending: 0, approved: 0, rejected: 0 });
-  const [slipsList, setSlipsList] = useState<any[]>([]);
-  const [loadingSlips, setLoadingSlips] = useState(false);
-  const [slipFilter, setSlipFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
-  const [searchSlipQuery, setSearchSlipQuery] = useState('');
-  const [previewSlip, setPreviewSlip] = useState<any | null>(null);
-  const [processingSlipId, setProcessingSlipId] = useState<string | null>(null);
-
-  // Zoom Settings State
-  const [zoomAccountId, setZoomAccountId] = useState('');
-  const [zoomClientId, setZoomClientId] = useState('');
-  const [zoomClientSecret, setZoomClientSecret] = useState('');
-  const [savingZoom, setSavingZoom] = useState(false);
-  const [testingZoom, setTestingZoom] = useState(false);
-  const [zoomStatusMessage, setZoomStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  // Floating Watermark position state
+  const [watermarkPos, setWatermarkPos] = useState({ top: '30%', left: '40%' });
 
   useEffect(() => {
-    fetchCourses();
-    generateRandomPassword();
+    fetchStudentData();
+
+    const interval = setInterval(() => {
+      const randomTop = Math.floor(15 + Math.random() * 65) + '%';
+      const randomLeft = Math.floor(10 + Math.random() * 60) + '%';
+      setWatermarkPos({ top: randomTop, left: randomLeft });
+    }, 10000);
+
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
   }, []);
 
-  useEffect(() => {
-    if (activeTab === 'students' && studentSubTab === 'list' && selectedFilterCourse) {
-      fetchStudentsForCourse(selectedFilterCourse);
-    }
-    if (activeTab === 'devices') {
-      fetchDevicesData();
-    }
-    if (activeTab === 'slips') {
-      fetchSlipsData();
-    }
-    if (activeTab === 'zoom') {
-      fetchZoomSettings();
-    }
-  }, [activeTab, studentSubTab, selectedFilterCourse]);
-
-  const fetchCourses = async () => {
-    setLoadingCourses(true);
+  const fetchStudentData = async () => {
     try {
-      const res = await fetch('/api/manage-courses');
-      const data = await res.json();
-      if (res.ok && data.courses) {
-        setCourses(data.courses);
-        if (data.courses.length > 0 && !selectedFilterCourse) {
-          setSelectedFilterCourse(data.courses[0].id.toString());
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push('/login');
+        return;
+      }
+      setCurrentUser(user);
+
+      const { data: enrollments } = await supabase
+        .from('course_enrollments')
+        .select('*, courses(*)')
+        .eq('user_id', user.id);
+
+      if (enrollments && enrollments.length > 0) {
+        const enrolledCourses = enrollments.map((e: any) => ({
+          ...e.courses,
+          enrollmentId: e.id,
+          validUntil: e.valid_until,
+          status: e.status || 'active',
+        }));
+        setCourses(enrolledCourses);
+        const defaultCourse = enrolledCourses[0];
+        setActiveCourse(defaultCourse);
+        setSlipAmount(defaultCourse.monthly_fee ? defaultCourse.monthly_fee.toString() : '1500');
+        loadCourseContent(defaultCourse.id, user.id);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadCourseContent = async (courseId: string, userId?: string) => {
+    try {
+      const targetUserId = userId || currentUser?.id;
+
+      // 1. Fetch Live Class
+      const { data: live } = await supabase
+        .from('live_classes')
+        .select('*')
+        .eq('course_id', courseId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      setLiveClass(live || null);
+
+      // 2. Fetch Recordings
+      const { data: recs } = await supabase
+        .from('recordings')
+        .select('*')
+        .eq('course_id', courseId)
+        .order('created_at', { ascending: false });
+
+      setRecordings(recs || []);
+      if (recs && recs.length > 0) {
+        setActiveRecording(recs[0]);
+      } else {
+        setActiveRecording(null);
+      }
+
+      // 3. Fetch Tutes / Materials
+      let matsData: any[] = [];
+      const { data: mats } = await supabase
+        .from('course_materials')
+        .select('*')
+        .eq('course_id', courseId)
+        .order('created_at', { ascending: false });
+
+      if (mats && mats.length > 0) {
+        matsData = mats;
+      } else {
+        const { data: fallbackMats } = await supabase
+          .from('materials')
+          .select('*')
+          .eq('course_id', courseId)
+          .order('created_at', { ascending: false });
+        if (fallbackMats && fallbackMats.length > 0) {
+          matsData = fallbackMats;
         }
       }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoadingCourses(false);
-    }
-  };
 
-  const fetchDevicesData = async () => {
-    setLoadingDevices(true);
-    try {
-      const res = await fetch('/api/admin/devices');
-      const data = await res.json();
-      if (res.ok) {
-        setDeviceStats(data.stats);
-        setDevicesList(data.students || []);
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoadingDevices(false);
-    }
-  };
+      setMaterials(matsData);
 
-  const fetchSlipsData = async () => {
-    setLoadingSlips(true);
-    try {
-      const res = await fetch('/api/admin/slips');
-      const data = await res.json();
-      if (res.ok) {
-        setSlipStats(data.stats);
-        setSlipsList(data.slips || []);
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoadingSlips(false);
-    }
-  };
+      // 4. Fetch Assignments
+      const { data: assigns } = await supabase
+        .from('assignments')
+        .select('*')
+        .eq('course_id', courseId)
+        .order('created_at', { ascending: false });
 
-  const fetchZoomSettings = async () => {
-    try {
-      const res = await fetch('/api/admin/zoom-settings');
-      const data = await res.json();
-      if (res.ok) {
-        setZoomAccountId(data.accountId || '');
-        setZoomClientId(data.clientId || '');
-        setZoomClientSecret(data.clientSecret || '');
+      setAssignments(assigns || []);
+
+      // 5. Fetch student submissions
+      if (targetUserId) {
+        const { data: userSubs } = await supabase
+          .from('assignment_submissions')
+          .select('*')
+          .eq('student_id', targetUserId);
+
+        setSubmissions(userSubs || []);
       }
     } catch (e) {
       console.error(e);
     }
   };
 
-  const handleSaveZoomSettings = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSavingZoom(true);
-    setZoomStatusMessage(null);
-    try {
-      const res = await fetch('/api/admin/zoom-settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'save_credentials',
-          accountId: zoomAccountId,
-          clientId: zoomClientId,
-          clientSecret: zoomClientSecret,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+  const handleSelectCourse = (course: any) => {
+    setActiveCourse(course);
+    setSlipAmount(course.monthly_fee ? course.monthly_fee.toString() : '1500');
+    loadCourseContent(course.id);
+  };
 
-      setZoomStatusMessage({ type: 'success', text: '✅ Zoom Credentials සාර්ථකව සුරැකිණි!' });
-    } catch (err: any) {
-      setZoomStatusMessage({ type: 'error', text: '❌ සුරැකීම අසාර්ථක විය: ' + err.message });
-    } finally {
-      setSavingZoom(false);
+  const handleLogout = async () => {
+    if (confirm('Are you sure you want to log out?')) {
+      await supabase.auth.signOut();
+      router.push('/login');
     }
   };
 
-  const handleTestZoomConnection = async () => {
-    setTestingZoom(true);
-    setZoomStatusMessage(null);
-    try {
-      const res = await fetch('/api/admin/zoom-settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'test_connection',
-          accountId: zoomAccountId,
-          clientId: zoomClientId,
-          clientSecret: zoomClientSecret,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Connection Failed');
-      }
-
-      setZoomStatusMessage({ type: 'success', text: '🎉 විශිෂ්ටයි! Zoom Account එක සමඟ සාර්ථකව සම්බන්ධ විය. API Ready!' });
-    } catch (err: any) {
-      setZoomStatusMessage({ type: 'error', text: '⚠️ ' + err.message });
-    } finally {
-      setTestingZoom(false);
+  const toggleFullScreen = () => {
+    if (!playerContainerRef.current) return;
+    if (!document.fullscreenElement) {
+      playerContainerRef.current.requestFullscreen().catch((err) => console.error(err));
+    } else {
+      document.exitFullscreen().catch((err) => console.error(err));
     }
   };
 
-  const handleApproveSlip = async (slip: any) => {
-    setProcessingSlipId(slip.id);
-    try {
-      const res = await fetch('/api/admin/slips', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'approve',
-          slipId: slip.id,
-          studentId: slip.student_id,
-          courseId: slip.course_id,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-
-      alert(data.message || 'රිසිට්පත සාර්ථකව අනුමත කරන ලදී!');
-      if (previewSlip?.id === slip.id) setPreviewSlip(null);
-      fetchSlipsData();
-      if (selectedFilterCourse) fetchStudentsForCourse(selectedFilterCourse);
-    } catch (err: any) {
-      alert('දෝෂයකි: ' + err.message);
-    } finally {
-      setProcessingSlipId(null);
-    }
-  };
-
-  const handleRejectSlip = async (slip: any) => {
-    if (!confirm(`${slip.studentName} ගේ මෙම රිසිට්පත ප්‍රතික්ෂේප කිරීමට අවශ්‍ය බව සහතිකද?`)) return;
-
-    setProcessingSlipId(slip.id);
-    try {
-      const res = await fetch('/api/admin/slips', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'reject',
-          slipId: slip.id,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-
-      alert('රිසිට්පත ප්‍රතික්ෂේප කරන ලදී.');
-      if (previewSlip?.id === slip.id) setPreviewSlip(null);
-      fetchSlipsData();
-    } catch (err: any) {
-      alert('දෝෂයකි: ' + err.message);
-    } finally {
-      setProcessingSlipId(null);
-    }
-  };
-
-  // 🗑️ Delete Slip (රිසිට්පත පද්ධතියෙන් සම්පූර්ණයෙන්ම ඉවත් කිරීම)
-  const handleDeleteSlip = async (slip: any) => {
-    if (!confirm(`${slip.studentName} ගේ මෙම රිසිට්පත (${slip.course_name}) පද්ධතියෙන් සම්පූර්ණයෙන්ම Delete කිරීමට අවශ්‍ය බව සහතිකද?`)) return;
-
-    setProcessingSlipId(slip.id);
-    try {
-      const res = await fetch('/api/admin/slips', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'delete',
-          slipId: slip.id,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-
-      alert(data.message || 'රිසිට්පත සාර්ථකව ඉවත් කරන ලදී.');
-      if (previewSlip?.id === slip.id) setPreviewSlip(null);
-      fetchSlipsData();
-    } catch (err: any) {
-      alert('දෝෂයකි: ' + err.message);
-    } finally {
-      setProcessingSlipId(null);
-    }
-  };
-
-  const handleResetSingleDevice = async (student: any) => {
-    if (!confirm(`${student.fullName} (@${student.username}) ගේ උපාංගය Reset කිරීමට අවශ්‍යද?`)) return;
-
-    setActionLoadingId(student.id);
-    try {
-      const res = await fetch('/api/admin/devices', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'reset_device', userId: student.id }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-
-      setDevicesList(prev =>
-        prev.map(s => (s.id === student.id ? { ...s, deviceId: null, isLocked: false } : s))
-      );
-      setDeviceStats(prev => ({
-        ...prev,
-        lockedCount: Math.max(0, prev.lockedCount - 1),
-        unlockedCount: prev.unlockedCount + 1,
-      }));
-      alert('උපාංගය සාර්ථකව Unlock කරන ලදී!');
-    } catch (err: any) {
-      alert('දෝෂයකි: ' + err.message);
-    } finally {
-      setActionLoadingId(null);
-    }
-  };
-
-  const handleBulkResetAll = async () => {
-    if (!confirm('අවවාදයයි! සියලුම සිසුන්ගේ උපාංග එකවර Unlock කිරීමට අවශ්‍ය බව සහතිකද?')) return;
-
-    setLoadingDevices(true);
-    try {
-      const res = await fetch('/api/admin/devices', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'reset_all' }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-
-      alert('සියලුම උපාංග සාර්ථකව Unlock කරන ලදී!');
-      fetchDevicesData();
-    } catch (err: any) {
-      alert('දෝෂයකි: ' + err.message);
-      setLoadingDevices(false);
-    }
-  };
-
-  const fetchCourseDetailedInfo = async (courseId: string) => {
-    setLoadingManageDetails(true);
-    try {
-      const res = await fetch(`/api/manage-courses?courseId=${courseId}`);
-      const data = await res.json();
-      if (res.ok) {
-        setSelectedCourseForManage(data.course);
-        setCourseLiveClass(data.liveClass);
-        setCourseRecordings(data.recordings || []);
-        setCourseMaterials(data.materials || []);
-        setCourseAssignments(data.assignments || []);
-        setCourseStudentCount(data.studentCount || 0);
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoadingManageDetails(false);
-    }
-  };
-
-  const handleSelectCourseToManage = (course: any) => {
-    setSelectedCourseForManage(course);
-    setCourseSectionTab('live_recordings');
-    fetchCourseDetailedInfo(course.id.toString());
-  };
-
-  const handleCreateCourse = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setCreatingCourse(true);
-    try {
-      const res = await fetch('/api/manage-courses', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'create_course',
-          title: newCourseTitle,
-          category: newCourseCategory,
-          type: newCourseType,
-          monthly_fee: newCourseFee,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-
-      alert('නව පන්තිය සාර්ථකව එක් කරන ලදී!');
-      setShowAddCourseModal(false);
-      setNewCourseTitle('');
-      fetchCourses();
-    } catch (err: any) {
-      alert('දෝෂයකි: ' + err.message);
-    } finally {
-      setCreatingCourse(false);
-    }
-  };
-
-  const handleDeleteCourse = async (courseId: string, title: string) => {
-    if (!confirm(`"${title}" පන්තිය සම්පූර්ණයෙන්ම ඉවත් කිරීමට අවශ්‍යද?`)) return;
-    try {
-      const res = await fetch('/api/manage-courses', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'delete_course', courseId }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-
-      alert('පන්තිය ඉවත් කරන ලදී!');
-      if (selectedCourseForManage?.id === courseId) {
-        setSelectedCourseForManage(null);
-      }
-      fetchCourses();
-    } catch (err: any) {
-      alert('දෝෂයකි: ' + err.message);
-    }
-  };
-
-  const handleSaveLiveClass = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedCourseForManage) return;
-    setSavingLiveClass(true);
-    try {
-      const res = await fetch('/api/manage-courses', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'schedule_live_class',
-          courseId: selectedCourseForManage.id,
-          title: schedTitle,
-          date: schedDate,
-          time: schedTime,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-
-      alert(data.message || 'සජීවී Zoom පන්තිය සාර්ථකව Schedule කරන ලදී!');
-      setCourseLiveClass(data.liveClass);
-      setSchedTitle('');
-    } catch (err: any) {
-      alert('දෝෂයකි: ' + err.message);
-    } finally {
-      setSavingLiveClass(false);
-    }
-  };
-
-  const handleDeleteLiveClass = async (classId: string) => {
-    if (!confirm('මෙම සජීවී පන්ති කාලසටහන ඉවත් කිරීමට අවශ්‍යද?')) return;
-    try {
-      const res = await fetch('/api/manage-courses', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'delete_live_class', classId }),
-      });
-      if (res.ok) {
-        setCourseLiveClass(null);
-        alert('කාලසටහන ඉවත් කරන ලදී.');
-      }
-    } catch (e: any) {
-      alert('දෝෂයකි: ' + e.message);
-    }
-  };
-
-  const extractYouTubeId = (url: string) => {
-    const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
-    return match ? match[1] : url.trim();
-  };
-
-  const handleAddRecording = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedCourseForManage) return;
-
-    const parsedVideoId = extractYouTubeId(recYoutubeUrl);
-    if (!parsedVideoId || parsedVideoId.length !== 11) {
-      alert('වලංගු YouTube Link එකක් ඇතුළත් කරන්න.');
+  const handleSubmitAssignment = async (assignmentId: string) => {
+    if (!submissionFile || !currentUser) {
+      alert('Please select your answer sheet (PDF or Image file).');
       return;
     }
 
-    setSavingRecording(true);
+    setUploadingSubmission(true);
     try {
-      const res = await fetch('/api/manage-courses', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'add_recording',
-          courseId: selectedCourseForManage.id,
-          title: recTitle,
-          lesson_date: recDate,
-          duration: recDuration,
-          video_id: parsedVideoId,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const fileExt = submissionFile.name.split('.').pop();
+      const storagePath = `submissions/${assignmentId}_${currentUser.id}_${Date.now()}.${fileExt}`;
 
-      alert('YouTube Recording එක සාර්ථකව පන්තියට එක් කරන ලදී!');
-      setCourseRecordings(prev => [data.recording, ...prev]);
-      setRecTitle('');
-      setRecYoutubeUrl('');
+      const { error: uploadErr } = await supabase.storage
+        .from('lms-materials')
+        .upload(storagePath, submissionFile, { cacheControl: '3600', upsert: true });
+
+      if (uploadErr) throw uploadErr;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('lms-materials')
+        .getPublicUrl(storagePath);
+
+      const { data: subData, error: dbErr } = await supabase
+        .from('assignment_submissions')
+        .upsert([
+          {
+            assignment_id: assignmentId,
+            student_id: currentUser.id,
+            submission_file_url: publicUrl,
+            status: 'submitted',
+            submitted_at: new Date().toISOString(),
+          },
+        ])
+        .select()
+        .single();
+
+      if (dbErr) throw dbErr;
+
+      alert('Answer sheet submitted successfully!');
+      setSubmissions(prev => [subData, ...prev.filter(s => s.assignment_id !== assignmentId)]);
+      setSubmittingAssignId(null);
+      setSubmissionFile(null);
     } catch (err: any) {
-      alert('දෝෂයකි: ' + err.message);
+      alert('Submission failed: ' + err.message);
     } finally {
-      setSavingRecording(false);
+      setUploadingSubmission(false);
     }
   };
 
-  const handleDeleteRecording = async (recId: string) => {
-    if (!confirm('මෙම Recording එක ඉවත් කිරීමට අවශ්‍යද?')) return;
-    try {
-      const res = await fetch('/api/manage-courses', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'delete_recording', recordingId: recId }),
-      });
-      if (res.ok) {
-        setCourseRecordings(prev => prev.filter(r => r.id !== recId));
-        alert('Recording එක ඉවත් කරන ලදී.');
-      }
-    } catch (e: any) {
-      alert('දෝෂයකි: ' + e.message);
-    }
-  };
-
-  const uploadToStorage = async (file: File, folder: string) => {
-    const cleanFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-    const storagePath = `${folder}/${Date.now()}_${cleanFileName}`;
-
-    const { error: uploadErr } = await supabase.storage
-      .from('lms-materials')
-      .upload(storagePath, file, { cacheControl: '3600', upsert: true });
-
-    if (uploadErr) throw uploadErr;
-
-    const { data: { publicUrl } } = supabase.storage
-      .from('lms-materials')
-      .getPublicUrl(storagePath);
-
-    return {
-      publicUrl,
-      fileName: file.name,
-      fileSize: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
-    };
-  };
-
-  const handleAddMaterial = async (e: React.FormEvent) => {
+  const handleUploadSlip = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedCourseForManage || !matFile) {
-      alert('කරුණාකර PDF හෝ Document ගොනුවක් තෝරන්න.');
+    if (!slipFile || !currentUser || !activeCourse) {
+      alert('Please select a bank slip file.');
       return;
     }
 
-    setSavingMaterial(true);
-    try {
-      const { publicUrl, fileName, fileSize } = await uploadToStorage(matFile, 'tutes');
+    setUploadingSlip(true);
+    setSlipSuccessMsg(false);
 
-      const res = await fetch('/api/manage-courses', {
+    try {
+      const cleanFileName = slipFile.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const storagePath = `slips/${currentUser.id}_${activeCourse.id}_${Date.now()}_${cleanFileName}`;
+
+      const { error: uploadErr } = await supabase.storage
+        .from('lms-materials')
+        .upload(storagePath, slipFile, { cacheControl: '3600', upsert: true });
+
+      if (uploadErr) throw uploadErr;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('lms-materials')
+        .getPublicUrl(storagePath);
+
+      const res = await fetch('/api/student/upload-slip', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'add_material',
-          courseId: selectedCourseForManage.id,
-          title: matTitle,
-          description: matDesc,
-          file_url: publicUrl,
-          file_name: fileName,
-          file_size: fileSize,
+          studentId: currentUser.id,
+          courseId: activeCourse.id,
+          amount: parseFloat(slipAmount) || activeCourse.monthly_fee || 0,
+          slipUrl: publicUrl,
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const resData = await res.json();
+      if (!res.ok) throw new Error(resData.error || 'Slip submission failed');
 
-      alert('ටියූට් / සටහන සාර්ථකව පන්තියට එක් කරන ලදී!');
-      setCourseMaterials(prev => [data.material, ...prev]);
-      setMatTitle('');
-      setMatDesc('');
-      setMatFile(null);
+      setSlipSuccessMsg(true);
+      setTimeout(() => {
+        setShowSlipModal(false);
+        setSlipFile(null);
+        setSlipSuccessMsg(false);
+      }, 2500);
     } catch (err: any) {
-      alert('දෝෂයකි: ' + err.message);
+      alert('Error: ' + err.message);
     } finally {
-      setSavingMaterial(false);
+      setUploadingSlip(false);
     }
   };
 
-  const handleDeleteMaterial = async (materialId: string) => {
-    if (!confirm('මෙම නිබන්ධනය ඉවත් කිරීමට අවශ්‍යද?')) return;
-    try {
-      const res = await fetch('/api/manage-courses', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'delete_material', materialId }),
-      });
-      if (res.ok) {
-        setCourseMaterials(prev => prev.filter(m => m.id !== materialId));
-        alert('නිබන්ධනය ඉවත් කරන ලදී.');
-      }
-    } catch (e: any) {
-      alert('දෝෂයකි: ' + e.message);
-    }
-  };
-
-  const handleAddAssignment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedCourseForManage) return;
-
-    if (!assignDueDate) {
-      alert('කරුණාකර Deadline දිනය තෝරන්න.');
-      return;
-    }
-
-    setSavingAssignment(true);
-    try {
-      let fileUrl = null;
-      if (assignFile) {
-        const uploaded = await uploadToStorage(assignFile, 'assignments');
-        fileUrl = uploaded.publicUrl;
-      }
-
-      const dueDateTime = `${assignDueDate}T${assignDueTime || '23:59'}:00Z`;
-
-      const res = await fetch('/api/manage-courses', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'add_assignment',
-          courseId: selectedCourseForManage.id,
-          title: assignTitle,
-          description: assignDesc,
-          due_date: dueDateTime,
-          total_marks: assignMarks,
-          file_url: fileUrl,
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-
-      alert('පැවරුම (Assignment) සාර්ථකව Publish කරන ලදී!');
-      setCourseAssignments(prev => [data.assignment, ...prev]);
-      setAssignTitle('');
-      setAssignDesc('');
-      setAssignDueDate('');
-      setAssignMarks('100');
-      setAssignFile(null);
-    } catch (err: any) {
-      alert('දෝෂයකි: ' + err.message);
-    } finally {
-      setSavingAssignment(false);
-    }
-  };
-
-  const handleDeleteAssignment = async (assignmentId: string) => {
-    if (!confirm('මෙම Assignment එක ඉවත් කිරීමට අවශ්‍යද?')) return;
-    try {
-      const res = await fetch('/api/manage-courses', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'delete_assignment', assignmentId }),
-      });
-      if (res.ok) {
-        setCourseAssignments(prev => prev.filter(a => a.id !== assignmentId));
-        alert('Assignment එක ඉවත් කරන ලදී.');
-      }
-    } catch (e: any) {
-      alert('දෝෂයකි: ' + e.message);
-    }
-  };
-
-  // 📝 Open Grading Modal & Fetch Submissions
-  const handleOpenGradingModal = async (assignment: any) => {
-    setGradingModalAssignment(assignment);
-    setLoadingSubmissions(true);
-    try {
-      const res = await fetch(`/api/admin/assignment-submissions?assignmentId=${assignment.id}`);
-      const data = await res.json();
-      if (res.ok) {
-        setAssignmentSubmissionsList(data.submissions || []);
-        const initialMarks: { [key: string]: string } = {};
-        const initialFeedback: { [key: string]: string } = {};
-        (data.submissions || []).forEach((s: any) => {
-          initialMarks[s.id] = s.marks !== null && s.marks !== undefined ? s.marks.toString() : '';
-          initialFeedback[s.id] = s.feedback || '';
-        });
-        setMarksInputMap(initialMarks);
-        setFeedbackInputMap(initialFeedback);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoadingSubmissions(false);
-    }
-  };
-
-  // 💾 Save Marks & Feedback for a submission
-  const handleSaveMarks = async (sub: any) => {
-    const enteredMarks = marksInputMap[sub.id];
-    const enteredFeedback = feedbackInputMap[sub.id];
-
-    if (enteredMarks === '' || enteredMarks === undefined) {
-      alert('කරුණාකර ලකුණු ප්‍රමාණය ඇතුළත් කරන්න.');
-      return;
-    }
-
-    setSavingMarksId(sub.id);
-    try {
-      const res = await fetch('/api/admin/assignment-submissions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'grade_submission',
-          submissionId: sub.id,
-          marks: enteredMarks,
-          feedback: enteredFeedback,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-
-      alert(`@${sub.studentUsername} සඳහා ලකුණු සාර්ථකව සුරකින ලදී!`);
-      setAssignmentSubmissionsList(prev =>
-        prev.map(s => (s.id === sub.id ? { ...s, marks: Number(enteredMarks), feedback: enteredFeedback, status: 'graded' } : s))
-      );
-    } catch (err: any) {
-      alert('දෝෂයකි: ' + err.message);
-    } finally {
-      setSavingMarksId(null);
-    }
-  };
-
-  const fetchStudentsForCourse = async (courseId: string) => {
-    setLoadingStudents(true);
-    try {
-      const res = await fetch(`/api/manage-student?courseId=${courseId}`);
-      const data = await res.json();
-      if (res.ok) {
-        setStudentsList(data.students || []);
-        if (data.currentMonthName) setCurrentMonthName(data.currentMonthName);
-        if (data.nextMonthName) setNextMonthName(data.nextMonthName);
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoadingStudents(false);
-    }
-  };
-
-  const generateRandomPassword = () => {
-    const randomDigits = Math.floor(1000 + Math.random() * 9000);
-    setPassword(`Mano#${randomDigits}`);
-  };
-
-  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    setFullName(val);
-    if (!username || username === '') {
-      const clean = val.toLowerCase().replace(/[^a-z0-9]/g, '');
-      const randomSuffix = Math.floor(100 + Math.random() * 900);
-      setUsername(clean ? `${clean}${randomSuffix}` : '');
-    }
-  };
-
-  const handleCourseToggle = (courseId: string) => {
-    setSelectedCourses(prev =>
-      prev.includes(courseId) ? prev.filter(id => id !== courseId) : [...prev, courseId]
-    );
-  };
-
-  const handleCreateStudent = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setFormError('');
-
-    if (selectedCourses.length === 0) {
-      setFormError('කරුණාකර ශිෂ්‍යයා සඳහා අවම වශයෙන් එක් පන්තියක්වත් තෝරන්න.');
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      const res = await fetch('/api/create-student', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fullName,
-          username,
-          phone,
-          password,
-          courseIds: selectedCourses,
-        }),
-      });
-
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error || 'Failed to create student');
-
-      setCreatedStudentData({
-        fullName,
-        username,
-        phone,
-        password,
-        selectedCoursesNames: courses
-          .filter(c => selectedCourses.includes(c.id))
-          .map(c => c.title)
-          .join(', '),
-      });
-
-      setFullName('');
-      setUsername('');
-      setPhone('');
-      setSelectedCourses([]);
-      generateRandomPassword();
-    } catch (err: any) {
-      setFormError(err.message);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  // 🗓️ මාසික පදනම අනුව සක්‍රිය කිරීම (Monthly Billing)
-  const handleActivateMonth = async (student: any, targetMonth: 'current_month' | 'next_month') => {
-    const monthLabel = targetMonth === 'next_month' ? (student.nextMonthName || 'ඊළඟ මාසය') : (student.currentMonthName || 'මෙම මාසය');
-    if (!confirm(`${student.fullName} සඳහා ${monthLabel} පන්ති ගාස්තු සක්‍රිය කිරීමට අවශ්‍යද?`)) return;
-
-    setActionLoadingId(`month_${targetMonth}_${student.userId}`);
-    try {
-      const res = await fetch('/api/manage-student', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'activate_month',
-          userId: student.userId,
-          enrollmentId: student.enrollmentId,
-          targetMonth,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-
-      alert(`${student.fullName} සඳහා ${monthLabel} සාර්ථකව සක්‍රිය කරන ලදී!`);
-      if (selectedFilterCourse) fetchStudentsForCourse(selectedFilterCourse);
-    } catch (err: any) {
-      alert('දෝෂයකි: ' + err.message);
-    } finally {
-      setActionLoadingId(null);
-    }
-  };
-
-  // 🔓/⛔ Access On / Off (Active <-> Inactive) Toggle කිරීම
-  const handleToggleStatus = async (student: any) => {
-    const newStatus = student.status === 'active' ? 'inactive' : 'active';
-    const actionLabel = newStatus === 'active' ? 'නැවත Access ලබාදීමට' : 'Access තාවකාලිකව අත්හිටුවීමට (Deactivate)';
-
-    if (!confirm(`${student.fullName} ගේ ${actionLabel} අවශ්‍ය බව සහතිකද?`)) return;
-
-    setActionLoadingId(`status_${student.userId}`);
-    try {
-      const res = await fetch('/api/manage-student', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'toggle_status',
-          enrollmentId: student.enrollmentId,
-          newStatus,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-
-      setStudentsList(prev =>
-        prev.map(s => (s.userId === student.userId ? { 
-          ...s, 
-          status: newStatus,
-          isPaidForCurrentMonth: newStatus === 'active' ? s.isPaidForCurrentMonth : false,
-          monthStatusText: newStatus === 'active' ? `${s.currentMonthName || 'මෙම'} මාසයට ගිණුම සක්‍රීයයි` : 'ප්‍රවේශය අත්හිටුවා ඇත (Suspended)'
-        } : s))
-      );
-    } catch (err: any) {
-      alert('දෝෂයකි: ' + err.message);
-    } finally {
-      setActionLoadingId(null);
-    }
-  };
-
-  const handleResetDevice = async (student: any) => {
-    if (!confirm(`${student.fullName} ගේ උපාංගය Reset කිරීමට අවශ්‍යද?`)) return;
-    setActionLoadingId(`reset_${student.userId}`);
-    try {
-      const res = await fetch('/api/admin/devices', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'reset_device',
-          userId: student.userId,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-
-      setStudentsList(prev =>
-        prev.map(s => (s.userId === student.userId ? { ...s, deviceId: null } : s))
-      );
-      alert('උපාංගය සාර්ථකව Reset කරන ලදී!');
-    } catch (err: any) {
-      alert('දෝෂයකි: ' + err.message);
-    } finally {
-      setActionLoadingId(null);
-    }
-  };
-
-  const togglePasswordVisibility = (userId: string) => {
-    setShowPasswordMap(prev => ({ ...prev, [userId]: !prev[userId] }));
-  };
-
-  // 💬 WhatsApp URL Generator (Unpaid අයට පමණක් Reminder Message එක යැවීම)
-  const getWhatsAppUrl = (student: any) => {
-    const cleanPhone = (student.phone || '').replace(/[^0-9]/g, '').replace(/^0/, '');
-    
-    if (!student.isPaidForCurrentMonth) {
-      const currentCourse = courses.find(c => c.id.toString() === selectedFilterCourse);
-      const courseTitle = currentCourse ? currentCourse.title : 'ICT Class';
-
-      const message = `ආයුබෝවන් ${student.fullName},
-ඔබගේ "${courseTitle}" පන්තිය සඳහා වන ${currentMonthName} මාසයේ පන්ති ගාස්තු මෙතෙක් ලැබී නොමැත.
-
-පන්ති පටිගත කිරීම් (Recordings) සහ පාඩම් සටහන් බාධාවකින් තොරව ලබාගැනීමට කරුණාකර පන්ති ගාස්තු ගෙවා ඔබගේ බැංකු රිසිට්පත Student Portal එකට (https://guru-lms-demo.vercel.app/login) Upload කිරීමට කාරුණික වන්න.
-
-ස්තූතියි!
-Learn ICT with Mano`;
-
-      return `https://wa.me/94${cleanPhone}?text=${encodeURIComponent(message)}`;
-    }
-
-    return `https://wa.me/94${cleanPhone}`;
-  };
-
-  const generateWhatsAppMessage = () => {
-    if (!createdStudentData) return '';
-    return `ආයුබෝවන් ${createdStudentData.fullName},
-ඔබව "Learn ICT with Mano" පන්ති පද්ධතියට (LMS) සාර්ථකව ලියාපදිංචි කරන ලදී.
-
-📚 පන්ති: ${createdStudentData.selectedCoursesNames}
-🌐 Login Link: https://guru-lms-demo.vercel.app/login
-👤 Username: ${createdStudentData.username}
-🔑 Password: ${createdStudentData.password}
-
-⚠️ ආරක්ෂක උපදෙස්: 
-ඔබ පළමුව Login වන උපාංගයට ඔබගේ ගිණුම ස්වයංක්‍‍රීයව ලොක් වේ. එබැවින් ඔබේ පෞද්ගලික උපාංගයෙන් පමණක් Login වන්න.`;
-  };
-
-  // Filter students by Search Query and Payment Status (All / Paid / Unpaid)
-  const filteredStudents = studentsList.filter(s => {
-    const matchesSearch =
-      s.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.phone.includes(searchQuery);
-
-    if (!matchesSearch) return false;
-
-    if (paymentFilter === 'paid') return s.isPaidForCurrentMonth;
-    if (paymentFilter === 'unpaid') return !s.isPaidForCurrentMonth;
-    return true;
-  });
-
-  const totalCount = studentsList.length;
-  const paidCount = studentsList.filter(s => s.isPaidForCurrentMonth).length;
-  const unpaidCount = studentsList.filter(s => !s.isPaidForCurrentMonth).length;
-
-  const filteredDevices = devicesList.filter(d =>
-    d.fullName.toLowerCase().includes(searchDeviceQuery.toLowerCase()) ||
-    d.username.toLowerCase().includes(searchDeviceQuery.toLowerCase()) ||
-    d.phone.includes(searchDeviceQuery)
-  );
-
-  const filteredSlips = slipsList.filter(slip => {
-    const matchesFilter = slipFilter === 'all' || slip.status === slipFilter;
-    const matchesSearch =
-      slip.studentName.toLowerCase().includes(searchSlipQuery.toLowerCase()) ||
-      slip.studentUsername.toLowerCase().includes(searchSlipQuery.toLowerCase()) ||
-      slip.course_name?.toLowerCase().includes(searchSlipQuery.toLowerCase()) ||
-      slip.studentPhone?.includes(searchSlipQuery);
-    return matchesFilter && matchesSearch;
-  });
+  const username = currentUser?.user_metadata?.username || currentUser?.email?.split('@')[0] || 'student';
+  const isCourseSuspended = activeCourse?.status === 'suspended';
+  const isCourseExpired = activeCourse?.validUntil && new Date(activeCourse.validUntil) < new Date();
 
   return (
-    <div className="min-h-screen bg-[#070b14] text-white p-6 md:p-10 font-sans">
+    <div className="min-h-screen bg-[#070b14] text-white p-4 md:p-8 font-sans select-none">
       {/* Top Header */}
-      <header className="flex flex-col md:flex-row items-center justify-between gap-4 pb-8 border-b border-slate-800">
-        <div className="flex items-center gap-3.5">
-          <div className="w-14 h-14 rounded-2xl bg-white border-2 border-purple-500/50 flex items-center justify-center shadow-xl shadow-purple-500/25 overflow-hidden shrink-0">
-            <img 
-              src="/logo.png" 
-              alt="Learn ICT with Mano" 
-              className="w-full h-full object-contain scale-[2.4] transform" 
-            />
+      <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 border-b border-slate-800 max-w-7xl mx-auto">
+        <div className="flex items-center justify-between w-full sm:w-auto">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-white border-2 border-purple-500/50 flex items-center justify-center shadow-xl shadow-purple-500/25 overflow-hidden shrink-0">
+              <img 
+                src="/logo.png" 
+                alt="Learn ICT with Mano" 
+                className="w-full h-full object-contain scale-[2.4] transform" 
+              />
+            </div>
+            <div>
+              <h1 className="text-base sm:text-lg font-black tracking-tight text-white flex items-center gap-2">
+                Learn ICT with Mano
+              </h1>
+              <p className="text-[11px] sm:text-xs text-slate-400">Student Portal • Welcome, <span className="text-purple-300 font-mono">@{username}</span></p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl font-black tracking-tight text-white flex items-center gap-2">
-              Learn ICT with Mano
-              <span className="px-2 py-0.5 rounded-full bg-purple-500/20 border border-purple-500/30 text-purple-300 text-[10px] font-bold uppercase tracking-wider">
-                Admin
-              </span>
-            </h1>
-            <p className="text-xs text-slate-400">Teacher Control Center & LMS Portal</p>
-          </div>
+
+          <button
+            onClick={handleLogout}
+            className="sm:hidden p-2 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500 hover:text-white transition cursor-pointer flex items-center gap-1 text-xs"
+            title="Log out"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
 
-        {/* Tab Navigation */}
-        <nav className="flex flex-wrap items-center gap-2 bg-[#0d1424] p-1.5 rounded-xl border border-slate-800">
+        <div className="flex flex-wrap items-center justify-between sm:justify-end gap-2.5 w-full sm:w-auto">
+          <div className="flex flex-wrap gap-2">
+            {courses.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => handleSelectCourse(c)}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer ${
+                  activeCourse?.id === c.id
+                    ? 'bg-purple-600 text-white shadow-md'
+                    : 'bg-[#0c1322] border border-slate-800 text-slate-400 hover:text-white'
+                }`}
+              >
+                📖 {c.title}
+              </button>
+            ))}
+          </div>
+
           <button
-            onClick={() => { setActiveTab('courses'); setSelectedCourseForManage(null); }}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition cursor-pointer ${
-              activeTab === 'courses' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
-            }`}
+            onClick={handleLogout}
+            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-500/10 border border-red-500/20 hover:bg-red-500 hover:text-white text-red-400 text-xs font-semibold transition cursor-pointer shadow-sm"
           >
-            📚 Courses / පන්ති
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Log out</span>
           </button>
-          <button
-            onClick={() => setActiveTab('students')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition cursor-pointer ${
-              activeTab === 'students' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            👨‍🎓 Students / සිසුන්
-          </button>
-          <button
-            onClick={() => setActiveTab('devices')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition cursor-pointer ${
-              activeTab === 'devices' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            📱 Devices / උපාංග
-          </button>
-          <button
-            onClick={() => setActiveTab('slips')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition cursor-pointer relative ${
-              activeTab === 'slips' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            🧾 Slip Approvals
-            {slipStats.pending > 0 && (
-              <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-amber-500 text-slate-950 font-bold text-[10px]">
-                {slipStats.pending}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => setActiveTab('zoom')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'zoom' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <Video className="w-4 h-4 text-blue-400" />
-            <span>🎥 Zoom Settings</span>
-          </button>
-        </nav>
+        </div>
       </header>
 
       {/* Main Content Area */}
-      <main className="mt-8 max-w-7xl mx-auto">
+      <main className="max-w-7xl mx-auto mt-6 space-y-6">
         
-        {/* TAB: ZOOM SETTINGS */}
-        {activeTab === 'zoom' && (
-          <div className="max-w-3xl mx-auto space-y-6">
-            <div className="bg-[#0c1322] border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
-              <div className="flex items-center gap-3.5 pb-4 border-b border-slate-800">
-                <div className="w-12 h-12 rounded-2xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
-                  <Video className="w-6 h-6" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                    Zoom Account කළමනාකරණය
-                  </h2>
-                  <p className="text-xs text-slate-400">
-                    ඔබගේ Zoom Pro / Business එකවුන්ට් එක මාරු වූ විට අලුත් Credentials මෙතැනින් Save කරන්න.
-                  </p>
-                </div>
+        {/* ⚠️ Access Suspended or Expired Warning Banner */}
+        {activeCourse && (isCourseSuspended || isCourseExpired) && (
+          <div className="bg-red-950/40 border border-red-500/40 p-5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-2xl">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 rounded-xl bg-red-500/20 border border-red-500/30 flex items-center justify-center text-red-400 text-2xl shrink-0">
+                ⚠️️
               </div>
+              <div>
+                <h3 className="text-sm sm:text-base font-bold text-red-300">
+                  {isCourseSuspended ? 'Access Temporarily Suspended for this Course' : 'Tuition Fee Access Period Has Expired'}
+                </h3>
+                <p className="text-xs text-slate-300 mt-0.5">
+                  Please complete your monthly class fee payment and upload your bank deposit slip here.
+                </p>
+              </div>
+            </div>
 
-              {zoomStatusMessage && (
-                <div className={`p-4 rounded-2xl text-xs flex items-center gap-2 border ${
-                  zoomStatusMessage.type === 'success' 
-                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' 
-                    : 'bg-red-500/10 border-red-500/30 text-red-300'
-                }`}>
-                  {zoomStatusMessage.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
-                  <span>{zoomStatusMessage.text}</span>
-                </div>
-              )}
+            <button
+              onClick={() => setShowSlipModal(true)}
+              className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-lg transition flex items-center justify-center gap-2 cursor-pointer shrink-0"
+            >
+              <CreditCard className="w-4 h-4" />
+              <span>💳 Upload Bank Slip</span>
+            </button>
+          </div>
+        )}
 
-              <form onSubmit={handleSaveZoomSettings} className="space-y-5">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">Zoom Account ID *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="උදා: xYzAbC123..."
-                    value={zoomAccountId}
-                    onChange={(e) => setZoomAccountId(e.target.value)}
-                    className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-3 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
-                  />
-                </div>
+        {/* Course Info Banner */}
+        {activeCourse && (
+          <div className="bg-[#0c1322] border border-slate-800 p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4 shadow-xl">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-white">{activeCourse.title}</h2>
+                <span className="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 text-[10px] font-bold">
+                  {activeCourse.category} • {activeCourse.type}
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Validity: <strong className={isCourseSuspended || isCourseExpired ? 'text-red-400' : 'text-emerald-400'}>
+                  {isCourseSuspended ? 'Suspended' : activeCourse.validUntil ? `Until ${new Date(activeCourse.validUntil).toLocaleDateString('en-US')}` : 'Active'}
+                </strong>
+              </p>
+            </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">Zoom Client ID *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="උදා: aBcDeF456..."
-                    value={zoomClientId}
-                    onChange={(e) => setZoomClientId(e.target.value)}
-                    className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-3 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
-                  />
-                </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <span className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 ${
+                isCourseSuspended || isCourseExpired
+                  ? 'bg-red-500/10 border-red-500/30 text-red-400'
+                  : 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400'
+              }`}>
+                <CheckCircle className="w-3.5 h-3.5" /> {isCourseSuspended ? 'Access Suspended' : isCourseExpired ? 'Expired' : 'Access Active'}
+              </span>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">Zoom Client Secret *</label>
-                  <input
-                    type="password"
-                    required
-                    placeholder="••••••••••••••••••••••••••••••"
-                    value={zoomClientSecret}
-                    onChange={(e) => setZoomClientSecret(e.target.value)}
-                    className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-3 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-
-                <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
-                  <button
-                    type="button"
-                    disabled={testingZoom || !zoomAccountId || !zoomClientId || !zoomClientSecret}
-                    onClick={handleTestZoomConnection}
-                    className="w-full sm:w-auto px-5 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition border border-slate-700 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${testingZoom ? 'animate-spin' : ''}`} />
-                    <span>{testingZoom ? 'Zoom එක පරීක්ෂා කරමින්...' : '🔍 Connection එක Test කරන්න'}</span>
-                  </button>
-
-                  <button
-                    type="submit"
-                    disabled={savingZoom}
-                    className="w-full sm:flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-lg shadow-blue-600/30 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    <KeyRound className="w-4 h-4" />
-                    <span>{savingZoom ? 'සුරැකෙමින් පවතී...' : '💾 Zoom Credentials සුරකින්න'}</span>
-                  </button>
-                </div>
-              </form>
+              <button
+                onClick={() => setShowSlipModal(true)}
+                className="px-4 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/40 font-bold text-xs transition flex items-center gap-1.5 cursor-pointer shadow-md"
+              >
+                <CreditCard className="w-4 h-4" />
+                <span>💳 Upload Bank Slip</span>
+              </button>
             </div>
           </div>
         )}
 
-        {/* TAB 1: COURSES */}
-        {activeTab === 'courses' && (
+        {/* Navigation Tabs */}
+        <div className="flex items-center gap-2 bg-[#0c1322] p-1.5 rounded-2xl border border-slate-800 w-fit">
+          <button
+            onClick={() => setActiveTab('videos')}
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
+              activeTab === 'videos'
+                ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/20'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Video className="w-4 h-4" />
+            <span>🎥 Videos & Live ({recordings.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('materials')}
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
+              activeTab === 'materials'
+                ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/20'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <FileText className="w-4 h-4 text-emerald-400" />
+            <span>📑 Handouts & Tutes ({materials.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('assignments')}
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
+              activeTab === 'assignments'
+                ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/20'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Award className="w-4 h-4 text-amber-400" />
+            <span>📝 Assignments & Tasks ({assignments.length})</span>
+          </button>
+        </div>
+
+        {/* TAB 1: VIDEOS & LIVE CLASS */}
+        {activeTab === 'videos' && (
           <div className="space-y-6">
-            {selectedCourseForManage ? (
-              <div className="space-y-6">
-                
-                {/* Course Header Bar */}
-                <div className="flex flex-wrap items-center justify-between gap-4 bg-[#0c1322] border border-slate-800 p-5 rounded-2xl shadow-xl">
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => setSelectedCourseForManage(null)}
-                      className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition flex items-center gap-1.5 text-xs font-semibold cursor-pointer"
-                    >
-                      <ArrowLeft className="w-4 h-4" />
-                      <span>සියලු පන්ති වෙත</span>
-                    </button>
-                    <div>
-                      <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                        {selectedCourseForManage.title}
-                        <span className="px-2.5 py-0.5 rounded-md bg-purple-500/20 text-purple-300 text-[10px] uppercase font-bold">
-                          {selectedCourseForManage.category} • {selectedCourseForManage.type}
-                        </span>
-                      </h2>
-                      <p className="text-xs text-slate-400">
-                        මාසික ගාස්තුව: <strong className="text-emerald-400">Rs. {selectedCourseForManage.monthly_fee}/-</strong> | සක්‍රිය සිසුන්: <strong className="text-purple-300">{courseStudentCount}</strong>
-                      </p>
-                    </div>
+            {liveClass ? (
+              <div className="bg-gradient-to-r from-purple-950/40 via-[#0c1322] to-[#131c31] border border-purple-500/40 rounded-2xl p-5 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-purple-600/30 border border-purple-500/40 flex items-center justify-center text-purple-300 animate-pulse">
+                    <Video className="w-6 h-6" />
                   </div>
-
-                  <button
-                    onClick={() => handleDeleteCourse(selectedCourseForManage.id, selectedCourseForManage.title)}
-                    className="px-3.5 py-2 rounded-xl bg-red-600/10 border border-red-500/30 hover:bg-red-600 hover:text-white text-red-400 text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    <span>මෙම පන්තිය Delete කරන්න</span>
-                  </button>
-                </div>
-
-                {/* Sub-Tabs Navigation */}
-                <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
-                  <button
-                    onClick={() => setCourseSectionTab('live_recordings')}
-                    className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
-                      courseSectionTab === 'live_recordings'
-                        ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/20'
-                        : 'bg-[#131c31] text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <Video className="w-4 h-4" />
-                    <span>🎥 Live & Recordings ({courseRecordings.length})</span>
-                  </button>
-
-                  <button
-                    onClick={() => setCourseSectionTab('materials')}
-                    className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
-                      courseSectionTab === 'materials'
-                        ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/20'
-                        : 'bg-[#131c31] text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <FileText className="w-4 h-4 text-emerald-400" />
-                    <span>📑 Tutes & Study Materials ({courseMaterials.length})</span>
-                  </button>
-
-                  <button
-                    onClick={() => setCourseSectionTab('assignments')}
-                    className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
-                      courseSectionTab === 'assignments'
-                        ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/20'
-                        : 'bg-[#131c31] text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <Award className="w-4 h-4 text-amber-400" />
-                    <span>📝 Assignments & Deadlines ({courseAssignments.length})</span>
-                  </button>
-                </div>
-
-                {loadingManageDetails ? (
-                  <div className="p-16 text-center text-slate-400">පන්තියේ දත්ත ලබාගනිමින් පවතී...</div>
-                ) : (
-                  <>
-                    {/* SECTION 1: LIVE & RECORDINGS */}
-                    {courseSectionTab === 'live_recordings' && (
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
-                        {/* Live Class Schedule Form */}
-                        <div className="bg-[#0c1322] border border-slate-800/80 rounded-2xl p-6 shadow-xl space-y-6">
-                          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-                            <div className="flex items-center gap-2">
-                              <Video className="w-5 h-5 text-purple-400" />
-                              <h3 className="font-bold text-base">සජීවී Zoom පන්තිය (Live Class)</h3>
-                            </div>
-                            {courseLiveClass && (
-                              <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold">
-                                SCHEDULED
-                              </span>
-                            )}
-                          </div>
-
-                          {courseLiveClass ? (
-                            <div className="p-5 rounded-xl bg-[#131c31] border border-purple-500/30 space-y-4">
-                              <div className="flex items-start justify-between">
-                                <div>
-                                  <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400">වත්මන් සජීවී කාලසටහන</span>
-                                  <h4 className="text-base font-bold text-white mt-0.5">{courseLiveClass.title}</h4>
-                                </div>
-                                <button
-                                  onClick={() => handleDeleteLiveClass(courseLiveClass.id)}
-                                  className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition cursor-pointer"
-                                  title="Schedule එක ඉවත් කරන්න"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </div>
-
-                              <div className="flex flex-wrap gap-4 text-xs text-slate-300">
-                                <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-purple-400" /> {courseLiveClass.date}</span>
-                                <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-purple-400" /> {courseLiveClass.time}</span>
-                              </div>
-
-                              <div className="pt-2">
-                                <a
-                                  href={`/api/zoom/start?meetingId=${courseLiveClass.meeting_id || courseLiveClass.zoom_join_url?.split('meetingId=')[1]?.split('&')[0]}`}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 transition flex items-center justify-center gap-2 cursor-pointer"
-                                >
-                                  <Video className="w-4 h-4" />
-                                  <span>🚀 Start Class (Host ලෙස පන්තිය ආරම්භ කරන්න)</span>
-                                </a>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="p-4 rounded-xl bg-slate-900/50 border border-dashed border-slate-800 text-center text-xs text-slate-500">
-                              මෙම පන්තියට තවමත් සජීවී Zoom Link එකක් Schedule කර නොමැත.
-                            </div>
-                          )}
-
-                          <form onSubmit={handleSaveLiveClass} className="space-y-4 pt-2">
-                            <div>
-                              <label className="block text-xs text-slate-400 mb-1">පාඩමේ මාතෘකාව *</label>
-                              <input
-                                type="text"
-                                required
-                                placeholder="උදා: Operating Systems & Practical Session"
-                                value={schedTitle}
-                                onChange={(e) => setSchedTitle(e.target.value)}
-                                className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-purple-500"
-                              />
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                              <div>
-                                <label className="block text-xs text-slate-400 mb-1">දිනය</label>
-                                <input
-                                  type="date"
-                                  required
-                                  value={schedDate}
-                                  onChange={(e) => setSchedDate(e.target.value)}
-                                  className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-xs text-slate-400 mb-1">වේලාව</label>
-                                <input
-                                  type="time"
-                                  required
-                                  value={schedTime}
-                                  onChange={(e) => setSchedTime(e.target.value)}
-                                  className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
-                                />
-                              </div>
-                            </div>
-
-                            <button
-                              type="submit"
-                              disabled={savingLiveClass}
-                              className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold py-3 rounded-xl text-xs transition shadow-lg shadow-purple-600/30 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
-                            >
-                              {savingLiveClass ? 'Zoom Meeting එක සෑදෙමින් පවතී...' : '⚡ Zoom Class එක Auto සාදා Publish කරන්න'}
-                            </button>
-                          </form>
-                        </div>
-
-                        {/* YouTube Recordings Section */}
-                        <div className="bg-[#0c1322] border border-slate-800/80 rounded-2xl p-6 shadow-xl space-y-5">
-                          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-                            <div className="flex items-center gap-2">
-                              <Film className="w-5 h-5 text-red-500" />
-                              <h3 className="font-bold text-base">Class Recordings ({courseRecordings.length})</h3>
-                            </div>
-                            <span className="px-2.5 py-0.5 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 text-[10px] font-bold flex items-center gap-1">
-                              <Youtube className="w-3 h-3" /> YouTube Package Data
-                            </span>
-                          </div>
-
-                          <form onSubmit={handleAddRecording} className="space-y-3 bg-[#131c31] p-4 rounded-xl border border-slate-800">
-                            <div>
-                              <label className="block text-[11px] text-slate-400 mb-1">පාඩමේ නම / මාතෘකාව *</label>
-                              <input
-                                type="text"
-                                required
-                                placeholder="උදා: පාඩම 03: Python Functions & Lists"
-                                value={recTitle}
-                                onChange={(e) => setRecTitle(e.target.value)}
-                                className="w-full bg-[#0c1322] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-red-500"
-                              />
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-3">
-                              <div>
-                                <label className="block text-[11px] text-slate-400 mb-1">පැවැත්වූ දිනය</label>
-                                <input
-                                  type="date"
-                                  required
-                                  value={recDate}
-                                  onChange={(e) => setRecDate(e.target.value)}
-                                  className="w-full bg-[#0c1322] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-red-500"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-[11px] text-slate-400 mb-1">කාලය (Duration)</label>
-                                <input
-                                  type="text"
-                                  placeholder="2h 00m"
-                                  value={recDuration}
-                                  onChange={(e) => setRecDuration(e.target.value)}
-                                  className="w-full bg-[#0c1322] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-red-500"
-                                />
-                              </div>
-                            </div>
-
-                            <div>
-                              <label className="block text-[11px] text-slate-400 mb-1">YouTube Unlisted Link එක *</label>
-                              <input
-                                type="text"
-                                required
-                                placeholder="https://youtu.be/xxxxxx හෝ https://www.youtube.com/watch?v=xxxxxx"
-                                value={recYoutubeUrl}
-                                onChange={(e) => setRecYoutubeUrl(e.target.value)}
-                                className="w-full bg-[#0c1322] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-red-300 font-mono focus:outline-none focus:border-red-500"
-                              />
-                            </div>
-
-                            <button
-                              type="submit"
-                              disabled={savingRecording}
-                              className="w-full bg-red-600 hover:bg-red-500 text-white font-semibold py-2.5 rounded-xl text-xs transition shadow-lg shadow-red-600/20 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5"
-                            >
-                              <Youtube className="w-3.5 h-3.5" />
-                              <span>{savingRecording ? 'එක්වෙමින් පවතී...' : '+ Recording එක එක් කරන්න'}</span>
-                            </button>
-                          </form>
-
-                          <div className="space-y-2.5 max-h-[320px] overflow-y-auto pr-1">
-                            {courseRecordings.length === 0 ? (
-                              <div className="p-8 rounded-xl bg-slate-900/30 border border-dashed border-slate-800 text-center space-y-1">
-                                <Film className="w-7 h-7 text-slate-600 mx-auto" />
-                                <div className="text-xs font-semibold text-slate-400">මෙම පන්තියට තවම Recordings නොමැත.</div>
-                              </div>
-                            ) : (
-                              courseRecordings.map((rec) => (
-                                <div key={rec.id} className="p-3.5 rounded-xl bg-[#131c31] border border-slate-800 hover:border-slate-700 transition flex items-center justify-between group">
-                                  <div className="space-y-1 pr-3">
-                                    <div className="flex items-center gap-2">
-                                      <PlayCircle className="w-4 h-4 text-red-400 shrink-0" />
-                                      <h5 className="text-xs font-semibold text-white line-clamp-1 group-hover:text-red-300 transition">{rec.title}</h5>
-                                    </div>
-                                    <div className="flex items-center gap-3 text-[10px] text-slate-400 pl-6">
-                                      <span>📅 {rec.lesson_date}</span>
-                                      <span>⏱️ {rec.duration || '2h 00m'}</span>
-                                    </div>
-                                  </div>
-                                  <button
-                                    onClick={() => handleDeleteRecording(rec.id)}
-                                    className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition cursor-pointer shrink-0"
-                                    title="Recording එක මකන්න"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                </div>
-                              ))
-                            )}
-                          </div>
-                        </div>
-
-                      </div>
-                    )}
-
-                    {/* SECTION 2: TUTES & STUDY MATERIALS */}
-                    {courseSectionTab === 'materials' && (
-                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                        <div className="lg:col-span-5 bg-[#0c1322] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
-                          <div className="flex items-center gap-2 pb-3 border-b border-slate-800">
-                            <UploadCloud className="w-5 h-5 text-emerald-400" />
-                            <h3 className="font-bold text-base">අලුත් ටියූට් / සටහනක් Upload කරන්න</h3>
-                          </div>
-
-                          <form onSubmit={handleAddMaterial} className="space-y-4">
-                            <div>
-                              <label className="block text-xs text-slate-400 mb-1">නිබන්ධනයේ නම / මාතෘකාව *</label>
-                              <input
-                                type="text"
-                                required
-                                placeholder="උදා: Grade 8 ICT - Unit 01 Handout"
-                                value={matTitle}
-                                onChange={(e) => setMatTitle(e.target.value)}
-                                className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="block text-xs text-slate-400 mb-1">කෙටි විස්තරය</label>
-                              <textarea
-                                rows={2}
-                                placeholder="උදා: පාඩමට අදාළ සම්පූර්ණ විස්තරය මෙහි අඩංගු වේ."
-                                value={matDesc}
-                                onChange={(e) => setMatDesc(e.target.value)}
-                                className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 resize-none"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="block text-xs text-slate-400 mb-1">PDF හෝ Document ගොනුව *</label>
-                              <input
-                                type="file"
-                                required
-                                accept=".pdf,.doc,.docx"
-                                onChange={(e) => setMatFile(e.target.files?.[0] || null)}
-                                className="w-full text-xs text-slate-300 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-emerald-600/20 file:text-emerald-400 hover:file:bg-emerald-600/30 cursor-pointer bg-[#131c31] border border-slate-700 rounded-xl p-2"
-                              />
-                            </div>
-
-                            <button
-                              type="submit"
-                              disabled={savingMaterial}
-                              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl text-xs transition shadow-lg shadow-emerald-600/20 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
-                            >
-                              <UploadCloud className="w-4 h-4" />
-                              <span>{savingMaterial ? 'ගොනුව Upload වෙමින් පවතී...' : '+ මෙම ටියූට් එක පන්තියට එක් කරන්න'}</span>
-                            </button>
-                          </form>
-                        </div>
-
-                        <div className="lg:col-span-7 bg-[#0c1322] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
-                          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-                            <h3 className="font-bold text-base flex items-center gap-2">
-                              <FileText className="w-4 h-4 text-emerald-400" />
-                              <span>පවතින නිබන්ධන ({courseMaterials.length})</span>
-                            </h3>
-                            <span className="text-[11px] text-slate-400">PDF Study Materials</span>
-                          </div>
-
-                          {courseMaterials.length === 0 ? (
-                            <div className="p-12 rounded-xl bg-slate-900/30 border border-dashed border-slate-800 text-center space-y-2">
-                              <File className="w-8 h-8 text-slate-600 mx-auto" />
-                              <div className="text-xs font-semibold text-slate-400">මෙම පන්තියට තවමත් ටියූට් එකතු කර නොමැත.</div>
-                            </div>
-                          ) : (
-                            <div className="space-y-3">
-                              {courseMaterials.map((mat) => (
-                                <div key={mat.id} className="p-4 rounded-xl bg-[#131c31] border border-slate-800 hover:border-slate-700 transition flex items-center justify-between group">
-                                  <div className="space-y-1 pr-4">
-                                    <div className="flex items-center gap-2">
-                                      <FileText className="w-4 h-4 text-emerald-400 shrink-0" />
-                                      <h5 className="text-xs font-bold text-white group-hover:text-emerald-300 transition">{mat.title}</h5>
-                                    </div>
-                                    <div className="flex items-center gap-3 text-[10px] text-slate-500 pl-6">
-                                      <span>📄 {mat.file_name}</span>
-                                      <span>📦 {mat.file_size}</span>
-                                    </div>
-                                  </div>
-
-                                  <div className="flex items-center gap-2 shrink-0">
-                                    <a
-                                      href={mat.file_url}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="p-2 rounded-lg bg-emerald-600/10 text-emerald-400 hover:bg-emerald-600 hover:text-white transition"
-                                      title="Open / Download"
-                                    >
-                                      <Download className="w-4 h-4" />
-                                    </a>
-                                    <button
-                                      onClick={() => handleDeleteMaterial(mat.id)}
-                                      className="p-2 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition cursor-pointer"
-                                      title="Delete"
-                                    >
-                                      <Trash2 className="w-4 h-4" />
-                                    </button>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-
-                      </div>
-                    )}
-
-                    {/* SECTION 3: ASSIGNMENTS & DEADLINES */}
-                    {courseSectionTab === 'assignments' && (
-                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                        <div className="lg:col-span-5 bg-[#0c1322] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
-                          <div className="flex items-center gap-2 pb-3 border-b border-slate-800">
-                            <Award className="w-5 h-5 text-amber-400" />
-                            <h3 className="font-bold text-base">නව Assignment එකක් සාදන්න</h3>
-                          </div>
-
-                          <form onSubmit={handleAddAssignment} className="space-y-4">
-                            <div>
-                              <label className="block text-xs text-slate-400 mb-1">පැවරුමේ මාතෘකාව *</label>
-                              <input
-                                type="text"
-                                required
-                                placeholder="උදා: Python Variables & Loops - Assignment"
-                                value={assignTitle}
-                                onChange={(e) => setAssignTitle(e.target.value)}
-                                className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
-                              />
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-3">
-                              <div>
-                                <label className="block text-xs text-amber-400 mb-1 font-semibold">Deadline Date *</label>
-                                <input
-                                  type="date"
-                                  required
-                                  value={assignDueDate}
-                                  onChange={(e) => setAssignDueDate(e.target.value)}
-                                  className="w-full bg-[#131c31] border border-amber-500/40 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-xs text-amber-400 mb-1 font-semibold">Time *</label>
-                                <input
-                                  type="time"
-                                  required
-                                  value={assignDueTime}
-                                  onChange={(e) => setAssignDueTime(e.target.value)}
-                                  className="w-full bg-[#131c31] border border-amber-500/40 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
-                                />
-                              </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-3">
-                              <div>
-                                <label className="block text-xs text-slate-400 mb-1">මුළු ලකුණු</label>
-                                <input
-                                  type="number"
-                                  value={assignMarks}
-                                  onChange={(e) => setAssignMarks(e.target.value)}
-                                  className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-xs text-slate-400 mb-1">Paper PDF (Optional)</label>
-                                <input
-                                  type="file"
-                                  accept=".pdf"
-                                  onChange={(e) => setAssignFile(e.target.files?.[0] || null)}
-                                  className="w-full text-[11px] text-slate-300 file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-[10px] file:font-semibold file:bg-amber-600/20 file:text-amber-400 cursor-pointer bg-[#131c31] border border-slate-700 rounded-xl p-1.5"
-                                />
-                              </div>
-                            </div>
-
-                            <button
-                              type="submit"
-                              disabled={savingAssignment}
-                              className="w-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-bold py-3 rounded-xl text-xs transition shadow-lg shadow-amber-600/20 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
-                            >
-                              <Award className="w-4 h-4" />
-                              <span>{savingAssignment ? 'සකස් වෙමින් පවතී...' : '+ Deadline සහිතව Publish කරන්න'}</span>
-                            </button>
-                          </form>
-                        </div>
-
-                        <div className="lg:col-span-7 bg-[#0c1322] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
-                          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-                            <h3 className="font-bold text-base flex items-center gap-2">
-                              <Award className="w-4 h-4 text-amber-400" />
-                              <span>ක්‍රියාකාරී Assignments ({courseAssignments.length})</span>
-                            </h3>
-                            <span className="text-[11px] text-slate-400">Deadlines & Tasks</span>
-                          </div>
-
-                          {courseAssignments.length === 0 ? (
-                            <div className="p-12 rounded-xl bg-slate-900/30 border border-dashed border-slate-800 text-center space-y-2">
-                              <Award className="w-8 h-8 text-slate-600 mx-auto" />
-                              <div className="text-xs font-semibold text-slate-400">මෙම පන්තියට තවමත් Assignments ලබාදී නොමැත.</div>
-                            </div>
-                          ) : (
-                            <div className="space-y-3">
-                              {courseAssignments.map((a) => {
-                                const isExpired = new Date(a.due_date) < new Date();
-                                const formattedDeadline = new Date(a.due_date).toLocaleString('si-LK', {
-                                  year: 'numeric',
-                                  month: 'short',
-                                  day: 'numeric',
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                });
-
-                                return (
-                                  <div key={a.id} className="p-4 rounded-xl bg-[#131c31] border border-slate-800 hover:border-slate-700 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 group">
-                                    <div className="space-y-1.5 pr-2">
-                                      <div className="flex items-center gap-2">
-                                        <h5 className="text-xs font-bold text-white group-hover:text-amber-300 transition">{a.title}</h5>
-                                        <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
-                                          isExpired ? 'bg-red-500/20 text-red-400' : 'bg-emerald-500/20 text-emerald-400'
-                                        }`}>
-                                          {isExpired ? 'Closed' : 'Active'}
-                                        </span>
-                                      </div>
-
-                                      <div className="flex flex-wrap items-center gap-4 text-[10px] text-slate-400 pt-1">
-                                        <span className="flex items-center gap-1 font-semibold text-amber-300">
-                                          <Clock className="w-3 h-3 text-amber-400" /> Deadline: {formattedDeadline}
-                                        </span>
-                                        <span>🎯 Marks: {a.total_marks}</span>
-                                      </div>
-                                    </div>
-
-                                    <div className="flex items-center gap-2 shrink-0">
-                                      {/* 📥 Submissions and Marks Button */}
-                                      <button
-                                        onClick={() => handleOpenGradingModal(a)}
-                                        className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/40 font-bold text-xs transition flex items-center gap-1.5 cursor-pointer shadow-sm"
-                                        title="සිසුන්ගේ පිළිතුරු පත්‍ර බලා ලකුණු ලබාදෙන්න"
-                                      >
-                                        <Award className="w-3.5 h-3.5" />
-                                        <span>📥 පිළිතුරු පත්‍ර & ලකුණු</span>
-                                      </button>
-
-                                      <button
-                                        onClick={() => handleDeleteAssignment(a.id)}
-                                        className="p-2 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition cursor-pointer shrink-0"
-                                        title="Delete"
-                                      >
-                                        <Trash2 className="w-4 h-4" />
-                                      </button>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-
-                      </div>
-                    )}
-                  </>
-                )}
-
-              </div>
-            ) : (
-              /* Overview of All Courses */
-              <div className="space-y-6">
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-[#0c1322] border border-slate-800 p-5 rounded-2xl shadow-xl">
                   <div>
-                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                      <BookOpen className="w-5 h-5 text-purple-400" />
-                      පාඨමාලා හා පන්ති කළමනාකරණය
-                    </h2>
-                    <p className="text-xs text-slate-400">Learn ICT with Mano - ඔබගේ සියලුම පන්ති මෙතැනින් කළමනාකරණය කරන්න.</p>
+                    <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[10px] font-bold uppercase tracking-wider">
+                      🔴 Live Zoom Class
+                    </span>
+                    <h3 className="text-base font-bold text-white mt-1">{liveClass.title}</h3>
+                    <div className="flex items-center gap-4 text-xs text-slate-400 mt-1">
+                      <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5 text-purple-400" /> {liveClass.date}</span>
+                      <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-purple-400" /> {liveClass.time}</span>
+                    </div>
                   </div>
-                  <button
-                    onClick={() => setShowAddCourseModal(true)}
-                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs shadow-lg shadow-purple-600/30 flex items-center gap-2 transition cursor-pointer"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>+ අලුත් පන්තියක් සාදන්න</span>
-                  </button>
                 </div>
 
-                {loadingCourses ? (
-                  <div className="p-16 text-center text-slate-400 text-sm">පන්ති ලැයිස්තුව ලබාගනිමින් පවතී...</div>
-                ) : courses.length === 0 ? (
-                  <div className="p-16 bg-[#0c1322] border border-slate-800 rounded-2xl text-center space-y-3">
-                    <BookOpen className="w-12 h-12 text-slate-600 mx-auto" />
-                    <h3 className="text-base font-bold text-white">තවමත් පන්ති කිසිවක් සකස් කර නොමැත</h3>
+                <a
+                  href={liveClass.zoom_join_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="w-full sm:w-auto px-6 py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-lg shadow-purple-600/30 transition text-center cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <span>🎥 Join Live Zoom Class</span>
+                </a>
+              </div>
+            ) : (
+              <div className="bg-[#0c1322] border border-slate-800 p-4 rounded-2xl text-center text-xs text-slate-500">
+                No live Zoom classes currently scheduled for this course.
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+              {/* YouTube Protected Player */}
+              <div className="lg:col-span-8 bg-[#0c1322] border border-slate-800/80 rounded-2xl p-5 shadow-2xl space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                  <div className="flex items-center gap-2">
+                    <Film className="w-5 h-5 text-red-500" />
+                    <h3 className="font-bold text-sm">Protected Class Recordings</h3>
+                    <span className="text-[10px] bg-red-500/10 border border-red-500/20 text-red-400 px-2.5 py-0.5 rounded-full font-bold ml-2">
+                      YouTube Package Data
+                    </span>
                   </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {courses.map((c) => (
-                      <div
-                        key={c.id}
-                        className="bg-[#0c1322] border border-slate-800/80 hover:border-purple-500/50 rounded-2xl p-6 shadow-xl flex flex-col justify-between space-y-5 transition group"
+
+                  {activeRecording && (
+                    <button
+                      onClick={toggleFullScreen}
+                      className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer border border-slate-700/60"
+                      title="Fullscreen"
+                    >
+                      {isFullscreen ? <Minimize className="w-3.5 h-3.5" /> : <Maximize className="w-3.5 h-3.5" />}
+                      <span className="text-[11px]">{isFullscreen ? 'Exit Fullscreen' : '⛶ Fullscreen'}</span>
+                    </button>
+                  )}
+                </div>
+
+                <div 
+                  ref={playerContainerRef}
+                  className="relative aspect-video w-full rounded-2xl bg-black border border-slate-800 overflow-hidden shadow-2xl flex items-center justify-center group"
+                  onContextMenu={(e) => e.preventDefault()}
+                >
+                  {activeRecording ? (
+                    <>
+                      <iframe
+                        src={`https://www.youtube-nocookie.com/embed/${activeRecording.video_id}?rel=0&modestbranding=1&controls=1&showinfo=0&disablekb=0&fs=0`}
+                        title={activeRecording.title}
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                        className="w-full h-full border-0"
+                      />
+
+                      {/* 1. Fullscreen Exit Floating Button */}
+                      {isFullscreen && (
+                        <button
+                          type="button"
+                          onClick={toggleFullScreen}
+                          className="absolute top-4 right-4 z-40 px-3.5 py-2 rounded-xl bg-black/85 hover:bg-purple-600 text-white text-xs font-bold flex items-center gap-1.5 border border-white/20 shadow-2xl backdrop-blur-md cursor-pointer transition transform hover:scale-105"
+                        >
+                          <Minimize className="w-4 h-4 text-purple-300" />
+                          <span>Exit Fullscreen</span>
+                        </button>
+                      )}
+
+                      {/* 2. Top-Shield: Title & Channel overlay */}
+                      <div 
+                        className="absolute top-0 left-0 right-32 h-16 z-20 bg-transparent cursor-default pointer-events-auto" 
+                        onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                        onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                        onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                        onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                      />
+
+                      {/* 3. Bottom-Left Shield: Copy Link Icon overlay */}
+                      <div 
+                        className="absolute bottom-0 left-0 w-36 h-24 z-20 bg-transparent cursor-default pointer-events-auto"
+                        onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                        onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                        onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                        onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                      />
+
+                      {/* 4. Bottom-Right Shield: "Watch on YouTube" overlay */}
+                      <div 
+                        className="absolute bottom-0 right-0 w-64 h-16 z-20 bg-transparent cursor-default pointer-events-auto"
+                        onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                        onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                        onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                        onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                      />
+
+                      {/* 5. Ultra-Translucent Faint Watermark */}
+                      <div 
+                        className="absolute z-30 pointer-events-none transition-all duration-1000 ease-in-out select-none"
+                        style={{ top: watermarkPos.top, left: watermarkPos.left }}
                       >
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between">
-                            <span className="px-2.5 py-1 rounded-md bg-purple-500/10 border border-purple-500/20 text-purple-400 text-[10px] uppercase font-bold tracking-wider">
-                              {c.category || 'ICT'} • {c.type || 'Theory'}
-                            </span>
-                            <span className="font-mono text-xs font-bold text-emerald-400">
-                              Rs. {c.monthly_fee || '0'}/-
-                            </span>
-                          </div>
-
-                          <h3 className="text-base font-bold text-white group-hover:text-purple-300 transition line-clamp-2">
-                            {c.title}
-                          </h3>
-
-                          <div className="flex items-center gap-4 text-xs text-slate-400 pt-2 border-t border-slate-800/60">
-                            <span className="flex items-center gap-1.5">
-                              <Users className="w-3.5 h-3.5 text-purple-400" />
-                              <span>{c.studentCount || 0} සිසුන්</span>
-                            </span>
-                            <span className="flex items-center gap-1.5">
-                              <Film className="w-3.5 h-3.5 text-red-400" />
-                              <span>{c.recordingCount || 0} Recordings</span>
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2 pt-2">
-                          <button
-                            onClick={() => handleSelectCourseToManage(c)}
-                            className="flex-1 py-2.5 rounded-xl bg-purple-600/20 hover:bg-purple-600 text-purple-300 hover:text-white border border-purple-500/30 font-semibold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
-                          >
-                            <span>⚙️ පන්තිය කළමනාකරණය</span>
-                          </button>
-                          <button
-                            onClick={() => handleDeleteCourse(c.id, c.title)}
-                            className="p-2.5 rounded-xl bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-slate-700/50 transition cursor-pointer"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                        <div className="text-[11px] font-mono font-medium text-white/20 tracking-widest uppercase drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">
+                          @{username} • Protected
                         </div>
                       </div>
-                    ))}
+                    </>
+                  ) : (
+                    <div className="w-full h-full flex flex-col items-center justify-center text-center p-6 text-slate-500 space-y-2">
+                      <PlayCircle className="w-12 h-12 text-slate-700" />
+                      <p className="text-xs">No recordings available for this course yet.</p>
+                    </div>
+                  )}
+                </div>
+
+                {activeRecording && (
+                  <div className="pt-2">
+                    <h4 className="text-sm font-bold text-white">{activeRecording.title}</h4>
+                    <div className="flex items-center gap-4 text-xs text-slate-400 mt-1">
+                      <span>📅 Date: {activeRecording.lesson_date}</span>
+                      <span>⏱️ Duration: {activeRecording.duration || '2h 00m'}</span>
+                    </div>
                   </div>
                 )}
               </div>
-            )}
-          </div>
-        )}
 
-        {/* TAB 2: STUDENTS */}
-        {activeTab === 'students' && (
-          <div className="space-y-6">
-            <div className="flex border-b border-slate-800 gap-4">
-              <button
-                onClick={() => setStudentSubTab('list')}
-                className={`pb-3 text-sm font-semibold transition border-b-2 cursor-pointer ${
-                  studentSubTab === 'list' ? 'border-purple-500 text-purple-400' : 'border-transparent text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                📋 පන්ති අනුව සිසුන් ලැයිස්තුව (Class-wise Students)
-              </button>
-              <button
-                onClick={() => setStudentSubTab('register')}
-                className={`pb-3 text-sm font-semibold transition border-b-2 cursor-pointer ${
-                  studentSubTab === 'register' ? 'border-purple-500 text-purple-400' : 'border-transparent text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                ➕ නව ශිෂ්‍ය ලියාපදිංචිය (Registration)
-              </button>
-            </div>
-
-            {studentSubTab === 'register' && (
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                <div className="lg:col-span-7 bg-[#0c1322] border border-slate-800/80 rounded-2xl p-6 md:p-8 shadow-xl">
-                  <div className="flex items-center gap-3 mb-6">
-                    <span className="p-2.5 bg-blue-500/10 border border-blue-500/20 text-blue-400 rounded-xl">👤</span>
-                    <div>
-                      <h2 className="text-lg font-bold">නව ශිෂ්‍යයෙකු ලියාපදිංචි කිරීම (Add Student)</h2>
-                      <p className="text-xs text-slate-400">ගාස්තු ගෙවූ සිසුන්ට Username සහ Password සකස් කර පන්ති වලට ඇතුළත් කරන්න.</p>
-                    </div>
-                  </div>
-
-                  {formError && (
-                    <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
-                      ⚠️ {formError}
-                    </div>
-                  )}
-
-                  <form onSubmit={handleCreateStudent} className="space-y-5">
-                    <div>
-                      <label className="block text-xs font-medium text-slate-300 mb-1.5">ශිෂ්‍යයාගේ සම්පූර්ණ නම *</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="උදා: Kasun Perera"
-                        value={fullName}
-                        onChange={handleNameChange}
-                        className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-purple-500 transition"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-xs font-medium text-slate-300 mb-1.5">Username *</label>
-                        <input
-                          type="text"
-                          required
-                          placeholder="kasun482"
-                          value={username}
-                          onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/\s+/g, ''))}
-                          className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-3 text-sm text-purple-300 font-mono focus:outline-none focus:border-purple-500 transition"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-slate-300 mb-1.5">WhatsApp දුරකථන අංකය</label>
-                        <input
-                          type="tel"
-                          placeholder="0771234567"
-                          value={phone}
-                          onChange={(e) => setPhone(e.target.value)}
-                          className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-purple-500 transition"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="flex justify-between items-center mb-1.5">
-                        <label className="text-xs font-medium text-slate-300">තාවකාලික මුරපදය (Password) *</label>
-                        <button type="button" onClick={generateRandomPassword} className="text-xs text-purple-400 hover:underline cursor-pointer">
-                          🔄 අලුත් Password එකක් සාදන්න
-                        </button>
-                      </div>
-                      <input
-                        type="text"
-                        required
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-mono focus:outline-none focus:border-purple-500 transition"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-medium text-slate-300 mb-2">සම්බන්ධ වන පන්ති තෝරන්න *</label>
-                      <div className="space-y-2.5 bg-[#131c31] p-4 rounded-xl border border-slate-800">
-                        {courses.map((course) => (
-                          <label key={course.id} className="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-slate-800/50 transition">
-                            <input
-                              type="checkbox"
-                              checked={selectedCourses.includes(course.id)}
-                              onChange={() => handleCourseToggle(course.id)}
-                              className="w-4 h-4 accent-purple-600 rounded cursor-pointer"
-                            />
-                            <span className="text-sm text-slate-200">{course.title}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-
-                    <button
-                      type="submit"
-                      disabled={isSubmitting}
-                      className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold py-3.5 rounded-xl transition duration-200 shadow-lg shadow-purple-600/20 disabled:opacity-50 cursor-pointer"
-                    >
-                      {isSubmitting ? 'ශිෂ්‍යයා ලියාපදිංචි වෙමින් පවතී...' : '+ ශිෂ්‍යයා ලියාපදිංචි කර ඇතුළත් කරන්න'}
-                    </button>
-                  </form>
+              {/* Recordings Playlist */}
+              <div className="lg:col-span-4 bg-[#0c1322] border border-slate-800/80 rounded-2xl p-5 shadow-2xl space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                  <h3 className="font-bold text-sm">Course Playlist ({recordings.length})</h3>
+                  <span className="text-[10px] text-slate-500">Video Lessons</span>
                 </div>
 
-                <div className="lg:col-span-5 flex flex-col gap-6">
-                  {createdStudentData ? (
-                    <div className="bg-[#0c1322] border border-emerald-500/40 rounded-2xl p-6 shadow-2xl relative overflow-hidden">
-                      <div className="flex items-center gap-3 text-emerald-400 mb-4">
-                        <span className="text-xl">✅</span>
-                        <h3 className="font-bold text-base">ශිෂ්‍යයා සාර්ථකව එක් කරන ලදී!</h3>
-                      </div>
-                      <div className="bg-[#131c31] p-4 rounded-xl border border-slate-800 text-xs text-slate-200 font-mono whitespace-pre-line leading-relaxed mb-4">
-                        {generateWhatsAppMessage()}
-                      </div>
-                      <div className="flex flex-col sm:flex-row gap-3">
-                        <button
-                          onClick={() => {
-                            navigator.clipboard.writeText(generateWhatsAppMessage());
-                            alert('WhatsApp Message එක Copy කරගන්නා ලදී!');
-                          }}
-                          className="flex-1 bg-slate-800 hover:bg-slate-700 text-white py-2.5 px-4 rounded-xl text-xs font-semibold transition text-center cursor-pointer"
-                        >
-                          📋 Copy Details
-                        </button>
-                        {createdStudentData.phone && (
-                          <a
-                            href={`https://wa.me/94${createdStudentData.phone.replace(/^0/, '')}?text=${encodeURIComponent(
-                              generateWhatsAppMessage()
-                            )}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-2.5 px-4 rounded-xl text-xs font-semibold transition text-center"
-                          >
-                            💬 Open WhatsApp
-                          </a>
-                        )}
-                      </div>
-                    </div>
+                <div className="space-y-2.5 max-h-[440px] overflow-y-auto pr-1">
+                  {recordings.length === 0 ? (
+                    <div className="p-8 text-center text-xs text-slate-500">No recordings found.</div>
                   ) : (
-                    <div className="bg-[#0c1322] border border-slate-800/80 rounded-2xl p-6 text-center text-slate-500 flex flex-col items-center justify-center min-h-[300px]">
-                      <span className="text-4xl mb-3">💬</span>
-                      <h4 className="text-slate-300 font-medium text-sm">WhatsApp Credentials Generator</h4>
-                      <p className="text-xs max-w-xs mt-1">ශිෂ්‍යයෙකු ලියාපදිංචි කළ වහාම ඔහුට යැවිය යුතු WhatsApp Login පණිවිඩය මෙතනින් සූදානම් වේ.</p>
-                    </div>
+                    recordings.map((rec) => (
+                      <button
+                        key={rec.id}
+                        onClick={() => setActiveRecording(rec)}
+                        className={`w-full text-left p-3.5 rounded-xl border transition cursor-pointer flex items-center gap-3 ${
+                          activeRecording?.id === rec.id
+                            ? 'bg-red-500/10 border-red-500/40 text-white'
+                            : 'bg-[#131c31] border-slate-800 hover:border-slate-700 text-slate-300'
+                        }`}
+                      >
+                        <PlayCircle className={`w-5 h-5 shrink-0 ${activeRecording?.id === rec.id ? 'text-red-400' : 'text-slate-500'}`} />
+                        <div className="overflow-hidden">
+                          <h5 className="text-xs font-semibold line-clamp-1">{rec.title}</h5>
+                          <div className="flex items-center gap-3 text-[10px] text-slate-400 mt-0.5">
+                            <span>📅 {rec.lesson_date}</span>
+                            <span>⏱️ {rec.duration || '2h 00m'}</span>
+                          </div>
+                        </div>
+                      </button>
+                    ))
                   )}
                 </div>
               </div>
-            )}
 
-            {studentSubTab === 'list' && (
-              <div className="space-y-6">
-                {/* Course Switcher Pills */}
-                <div className="flex flex-wrap items-center gap-2 bg-[#0c1322] p-2 rounded-2xl border border-slate-800">
-                  {courses.map((course) => (
-                    <button
-                      key={course.id}
-                      onClick={() => setSelectedFilterCourse(course.id.toString())}
-                      className={`px-4 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
-                        selectedFilterCourse === course.id.toString()
-                          ? 'bg-purple-600 text-white shadow-md'
-                          : 'bg-[#131c31] text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      📚 {course.title}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Filter and Search Bar with Paid/Unpaid Tabs */}
-                <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 bg-[#0c1322] p-4 rounded-2xl border border-slate-800 shadow-xl">
-                  {/* Quick Payment Status Filter Pills */}
-                  <div className="flex items-center gap-2 bg-[#131c31] p-1.5 rounded-xl border border-slate-800">
-                    <button
-                      onClick={() => setPaymentFilter('all')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                        paymentFilter === 'all'
-                          ? 'bg-purple-600 text-white shadow'
-                          : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      👥 සියලු සිසුන් ({totalCount})
-                    </button>
-
-                    <button
-                      onClick={() => setPaymentFilter('paid')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
-                        paymentFilter === 'paid'
-                          ? 'bg-emerald-600 text-white shadow'
-                          : 'text-emerald-400/80 hover:text-emerald-300'
-                      }`}
-                    >
-                      <span>✅ {currentMonthName} ගෙවූ සිසුන්</span>
-                      <span className="px-1.5 py-0.2 rounded-full bg-emerald-950 text-emerald-300 text-[10px] font-bold">
-                        {paidCount}
-                      </span>
-                    </button>
-
-                    <button
-                      onClick={() => setPaymentFilter('unpaid')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
-                        paymentFilter === 'unpaid'
-                          ? 'bg-amber-500 text-slate-950 font-bold shadow'
-                          : 'text-amber-400/90 hover:text-amber-300'
-                      }`}
-                    >
-                      <span>⚠️ {currentMonthName} නොගෙවූ සිසුන්</span>
-                      <span className="px-1.5 py-0.2 rounded-full bg-slate-900 text-amber-300 text-[10px] font-bold">
-                        {unpaidCount}
-                      </span>
-                    </button>
-                  </div>
-
-                  {/* Search box & Refresh */}
-                  <div className="flex items-center gap-3">
-                    <div className="relative flex-1 sm:w-72">
-                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-                      <input
-                        type="text"
-                        placeholder="නම, Username හෝ Phone සොයන්න..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full bg-[#131c31] border border-slate-700 rounded-xl pl-9 pr-4 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
-                      />
-                    </div>
-                    <button
-                      onClick={() => selectedFilterCourse && fetchStudentsForCourse(selectedFilterCourse)}
-                      className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer"
-                      title="Refresh"
-                    >
-                      <RefreshCw className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Students Table */}
-                <div className="bg-[#0c1322] border border-slate-800/80 rounded-2xl overflow-hidden shadow-xl">
-                  {loadingStudents ? (
-                    <div className="p-16 text-center text-slate-400 text-sm">සිසුන්ගේ තොරතුරු ලබාගනිමින් පවතී...</div>
-                  ) : filteredStudents.length === 0 ? (
-                    <div className="p-16 text-center text-slate-500 text-sm space-y-2">
-                      <Users className="w-10 h-10 text-slate-700 mx-auto" />
-                      <div>
-                        {paymentFilter === 'unpaid'
-                          ? `විශිෂ්ටයි! ${currentMonthName} මාසය සඳහා ගාස්තු නොගෙවූ කිසිදු ශිෂ්‍යයෙකු නොමැත.`
-                          : 'මෙම වර්ගයට අදාළ සිසුන් කිසිවකු හමු නොවීය.'}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs text-slate-300">
-                        <thead className="bg-[#131c31] text-slate-400 border-b border-slate-800 uppercase tracking-wider text-[10px]">
-                          <tr>
-                            <th className="py-3.5 px-4">ශිෂ්‍යයා (Student)</th>
-                            <th className="py-3.5 px-4">Username</th>
-                            <th className="py-3.5 px-4">මුරපදය (Password)</th>
-                            <th className="py-3.5 px-4">දුරකථන අංකය</th>
-                            <th className="py-3.5 px-4">උපාංගය (Device)</th>
-                            <th className="py-3.5 px-4">මාසික ගෙවීම් තත්ත්වය ({currentMonthName})</th>
-                            <th className="py-3.5 px-4 text-center">ක්‍රියාමාර්ග (ACTIONS)</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-800/60">
-                          {filteredStudents.map((st) => {
-                            const isPwdVisible = !!showPasswordMap[st.userId];
-                            const isSuspended = st.status === 'inactive' || st.status === 'suspended';
-
-                            return (
-                              <tr key={st.userId} className={`transition ${
-                                !st.isPaidForCurrentMonth ? 'bg-amber-950/10 hover:bg-amber-950/20' : 'hover:bg-slate-800/30'
-                              }`}>
-                                <td className="py-3.5 px-4 font-semibold text-white">
-                                  {st.fullName}
-                                  {!st.isPaidForCurrentMonth && (
-                                    <span className="ml-2 px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[9px] font-bold">
-                                      UNPAID
-                                    </span>
-                                  )}
-                                </td>
-
-                                <td className="py-3.5 px-4 font-mono text-purple-400">@{st.username}</td>
-                                
-                                {/* Password with Eye & Copy */}
-                                <td className="py-3.5 px-4">
-                                  <div className="inline-flex items-center gap-2 bg-[#0c1322] px-2.5 py-1 rounded-lg border border-slate-700/60 font-mono text-[11px]">
-                                    <span className={isPwdVisible ? 'text-amber-300 font-bold' : 'text-slate-400'}>
-                                      {isPwdVisible ? st.password : '••••••••'}
-                                    </span>
-                                    <div className="flex items-center gap-1 border-l border-slate-700 pl-1.5 ml-1">
-                                      <button
-                                        type="button"
-                                        onClick={() => togglePasswordVisibility(st.userId)}
-                                        className="text-slate-400 hover:text-white transition p-0.5 cursor-pointer"
-                                        title={isPwdVisible ? 'මුරපදය සඟවන්න' : 'මුරපදය බලන්න'}
-                                      >
-                                        {isPwdVisible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          navigator.clipboard.writeText(st.password);
-                                          alert(`@${st.username} ගේ Password එක Copy කරගන්නා ලදී!`);
-                                        }}
-                                        className="text-slate-400 hover:text-emerald-400 transition p-0.5 cursor-pointer"
-                                        title="Password Copy කරන්න"
-                                      >
-                                        <Copy className="w-3.5 h-3.5" />
-                                      </button>
-                                    </div>
-                                  </div>
-                                </td>
-
-                                <td className="py-3.5 px-4">
-                                  {st.phone ? (
-                                    <a
-                                      href={`https://wa.me/94${st.phone.replace(/^0/, '')}`}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="text-emerald-400 hover:underline flex items-center gap-1 font-mono"
-                                    >
-                                      💬 {st.phone}
-                                    </a>
-                                  ) : (
-                                    <span className="text-slate-600">-</span>
-                                  )}
-                                </td>
-                                
-                                <td className="py-3.5 px-4">
-                                  {st.deviceId ? (
-                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-300 font-mono text-[10px]">
-                                      🔒 Locked
-                                    </span>
-                                  ) : (
-                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-800 text-slate-400 text-[10px]">
-                                      🔓 Unlocked
-                                    </span>
-                                  )}
-                                </td>
-
-                                {/* Monthly Status Display */}
-                                <td className="py-3.5 px-4">
-                                  <div className="flex flex-col gap-1">
-                                    <div className="flex items-center gap-1.5">
-                                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                                        isSuspended
-                                          ? 'bg-red-500/20 text-red-400 border border-red-500/30'
-                                          : st.isPaidForCurrentMonth
-                                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                                          : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                                      }`}>
-                                        {isSuspended ? '⛔ Suspended' : st.isPaidForCurrentMonth ? '✅ Paid' : '⚠️ Unpaid'}
-                                      </span>
-                                    </div>
-
-                                    <span className={`text-[11px] font-medium ${
-                                      isSuspended
-                                        ? 'text-red-400'
-                                        : st.isPaidForCurrentMonth
-                                        ? 'text-emerald-400'
-                                        : 'text-amber-400'
-                                    }`}>
-                                      {st.monthStatusText}
-                                    </span>
-                                  </div>
-                                </td>
-
-                                {/* Dynamic Monthly Actions & Reminders */}
-                                <td className="py-3.5 px-4">
-                                  <div className="flex flex-wrap items-center justify-center gap-2">
-                                    
-                                    {/* 💬 Smart WhatsApp Button */}
-                                    {st.phone && (
-                                      <a
-                                        href={getWhatsAppUrl(st)}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition flex items-center gap-1.5 cursor-pointer shadow ${
-                                          !st.isPaidForCurrentMonth
-                                            ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold animate-pulse'
-                                            : 'bg-slate-800 hover:bg-emerald-600 hover:text-white text-slate-300 border border-slate-700'
-                                        }`}
-                                        title={
-                                          !st.isPaidForCurrentMonth
-                                            ? `${st.fullName} ට ${currentMonthName} මාසයේ ගාස්තු ගෙවීම සිහිපත් කර WhatsApp පණිවිඩයක් යවන්න`
-                                            : `${st.fullName} සමඟ සාමාන්‍ය WhatsApp Chat එකක් විවෘත කරන්න (Reminder පණිවිඩ නොමැත)`
-                                        }
-                                      >
-                                        <MessageSquare className="w-3.5 h-3.5" />
-                                        <span>{!st.isPaidForCurrentMonth ? '💬 Reminder යවන්න' : '💬 WhatsApp Chat'}</span>
-                                      </a>
-                                    )}
-
-                                    {/* මෙම මාසය සක්‍රිය කිරීම */}
-                                    <button
-                                      disabled={actionLoadingId === `month_current_month_${st.userId}`}
-                                      onClick={() => handleActivateMonth(st, 'current_month')}
-                                      className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[11px] transition shadow cursor-pointer disabled:opacity-50"
-                                      title={`${currentMonthName} මාසය සඳහා සක්‍රිය කරන්න`}
-                                    >
-                                      {actionLoadingId === `month_current_month_${st.userId}` ? '...' : `🗓️ ${currentMonthName} (+Active)`}
-                                    </button>
-
-                                    {/* ඊළඟ මාසය සක්‍රිය කිරීම */}
-                                    <button
-                                      disabled={actionLoadingId === `month_next_month_${st.userId}`}
-                                      onClick={() => handleActivateMonth(st, 'next_month')}
-                                      className="px-2.5 py-1.5 rounded-lg bg-purple-600/30 hover:bg-purple-600 text-purple-200 hover:text-white border border-purple-500/30 font-semibold text-[11px] transition cursor-pointer disabled:opacity-50"
-                                      title={`${nextMonthName} මාසය දක්වා සක්‍රිය කරන්න`}
-                                    >
-                                      {actionLoadingId === `month_next_month_${st.userId}` ? '...' : `+ ${nextMonthName}`}
-                                    </button>
-
-                                    {/* Access On/Off Toggle Button */}
-                                    <button
-                                      disabled={actionLoadingId === `status_${st.userId}`}
-                                      onClick={() => handleToggleStatus(st)}
-                                      className={`px-2 py-1.5 rounded-lg text-[11px] font-semibold transition border cursor-pointer disabled:opacity-50 ${
-                                        st.status === 'active'
-                                          ? 'bg-red-500/10 hover:bg-red-600 hover:text-white text-red-400 border-red-500/30'
-                                          : 'bg-emerald-500/10 hover:bg-emerald-600 hover:text-white text-emerald-400 border-emerald-500/30'
-                                      }`}
-                                    >
-                                      {actionLoadingId === `status_${st.userId}` ? '...' : st.status === 'active' ? '⛔ අත්හිටුවන්න' : '🔓 On කරන්න'}
-                                    </button>
-
-                                    {/* Device Reset */}
-                                    {st.deviceId && (
-                                      <button
-                                        disabled={actionLoadingId === `reset_${st.userId}`}
-                                        onClick={() => handleResetDevice(st)}
-                                        className="px-2 py-1.5 rounded-lg bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-slate-700 text-[11px] cursor-pointer"
-                                        title="උපාංගය Reset කරන්න"
-                                      >
-                                        🔄 Reset
-                                      </button>
-                                    )}
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* TAB 3: DEVICES */}
-        {activeTab === 'devices' && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-              <div className="bg-[#0c1322] border border-slate-800 p-5 rounded-2xl flex items-center justify-between shadow-xl">
-                <div>
-                  <div className="text-xs text-slate-400">මුළු ලියාපදිංචි සිසුන්</div>
-                  <div className="text-2xl font-bold font-mono text-white mt-1">{deviceStats.totalStudents}</div>
-                </div>
-                <div className="w-11 h-11 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center">
-                  <Users className="w-5 h-5" />
-                </div>
-              </div>
-
-              <div className="bg-[#0c1322] border border-slate-800 p-5 rounded-2xl flex items-center justify-between shadow-xl">
-                <div>
-                  <div className="text-xs text-slate-400">උපාංග ලොක් වූ සිසුන් (Active)</div>
-                  <div className="text-2xl font-bold font-mono text-amber-400 mt-1">{deviceStats.lockedCount}</div>
-                </div>
-                <div className="w-11 h-11 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center">
-                  <Lock className="w-5 h-5" />
-                </div>
-              </div>
-
-              <div className="bg-[#0c1322] border border-slate-800 p-5 rounded-2xl flex items-center justify-between shadow-xl">
-                <div>
-                  <div className="text-xs text-slate-400">Unlocked / අලුත් උපාංග බලාපොරොත්තු</div>
-                  <div className="text-2xl font-bold font-mono text-emerald-400 mt-1">{deviceStats.unlockedCount}</div>
-                </div>
-                <div className="w-11 h-11 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
-                  <Unlock className="w-5 h-5" />
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-[#0c1322] border border-slate-800 p-5 rounded-2xl shadow-xl">
-              <div className="flex-1 w-full sm:max-w-md relative">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-                <input
-                  type="text"
-                  placeholder="ශිෂ්‍යයාගේ නම, Username (@) හෝ Phone ගසා සොයන්න..."
-                  value={searchDeviceQuery}
-                  onChange={(e) => setSearchDeviceQuery(e.target.value)}
-                  className="w-full bg-[#131c31] border border-slate-700 rounded-xl pl-10 pr-4 py-2.5 text-xs text-white focus:outline-none focus:border-purple-500"
-                />
-              </div>
-
-              <div className="flex items-center gap-3 w-full sm:w-auto">
-                <button
-                  onClick={fetchDevicesData}
-                  className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer"
-                  title="Refresh"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={handleBulkResetAll}
-                  className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-red-600/10 border border-red-500/30 hover:bg-red-600 hover:text-white text-red-400 text-xs font-semibold transition cursor-pointer"
-                >
-                  🔓 සියලුම උපාංග Reset කරන්න (Bulk Unlock)
-                </button>
-              </div>
-            </div>
-
-            <div className="bg-[#0c1322] border border-slate-800/80 rounded-2xl overflow-hidden shadow-xl">
-              {loadingDevices ? (
-                <div className="p-16 text-center text-slate-400 text-sm">උපාංග දත්ත ලබාගනිමින් පවතී...</div>
-              ) : filteredDevices.length === 0 ? (
-                <div className="p-16 text-center text-slate-500 text-sm">සිසුන් හමු නොවීය.</div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs text-slate-300">
-                    <thead className="bg-[#131c31] text-slate-400 border-b border-slate-800 uppercase tracking-wider text-[10px]">
-                      <tr>
-                        <th className="py-3.5 px-4">ශිෂ්‍යයා (Student)</th>
-                        <th className="py-3.5 px-4">Username</th>
-                        <th className="py-3.5 px-4">දුරකථන අංකය</th>
-                        <th className="py-3.5 px-4">Device Status</th>
-                        <th className="py-3.5 px-4">Device Identifier</th>
-                        <th className="py-3.5 px-4 text-center">ක්‍රියාමාර්ගය (Action)</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800/60">
-                      {filteredDevices.map((st) => (
-                        <tr key={st.id} className="hover:bg-slate-800/30 transition">
-                          <td className="py-3.5 px-4 font-semibold text-white">{st.fullName}</td>
-                          <td className="py-3.5 px-4 font-mono text-purple-400">@{st.username}</td>
-                          <td className="py-3.5 px-4">
-                            {st.phone ? (
-                              <a
-                                href={`https://wa.me/94${st.phone.replace(/^0/, '')}`}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-emerald-400 hover:underline flex items-center gap-1"
-                              >
-                                <PhoneCall className="w-3 h-3" /> {st.phone}
-                              </a>
-                            ) : (
-                              <span className="text-slate-600">-</span>
-                            )}
-                          </td>
-                          <td className="py-3.5 px-4">
-                            {st.isLocked ? (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-300 font-mono text-[10px]">
-                                🔒 Locked
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px]">
-                                🔓 Unlocked
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-3.5 px-4 font-mono text-[10px] text-slate-500">
-                            {st.deviceId ? `${st.deviceId.substring(0, 16)}...` : 'කිසිදු උපාංගයක් ලොක් වී නැත'}
-                          </td>
-                          <td className="py-3.5 px-4 text-center">
-                            {st.isLocked ? (
-                              <button
-                                disabled={actionLoadingId === st.id}
-                                onClick={() => handleResetSingleDevice(st)}
-                                className="px-3 py-1.5 rounded-lg bg-red-600/20 hover:bg-red-600 text-red-300 hover:text-white border border-red-500/30 font-semibold text-[11px] transition cursor-pointer shadow-md disabled:opacity-50"
-                              >
-                                {actionLoadingId === st.id ? 'Reset වෙමින්...' : '🔓 Reset Device'}
-                              </button>
-                            ) : (
-                              <span className="text-[11px] text-slate-600">Ready to Login</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
             </div>
           </div>
         )}
 
-        {/* TAB 4: SLIP APPROVALS */}
-        {activeTab === 'slips' && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-              <div className="bg-[#0c1322] border border-slate-800 p-5 rounded-2xl flex items-center justify-between shadow-xl">
-                <div>
-                  <div className="text-xs text-slate-400">මුළු රිසිට්පත්</div>
-                  <div className="text-2xl font-bold font-mono text-white mt-1">{slipStats.total}</div>
-                </div>
-                <div className="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center">
-                  <CreditCard className="w-5 h-5" />
-                </div>
+        {/* TAB 2: TUTES & STUDY MATERIALS */}
+        {activeTab === 'materials' && (
+          <div className="bg-[#0c1322] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-emerald-400" />
+                  <span>Course Handouts & Study Materials</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">View and download all official class handouts, tutes, and past papers.</p>
               </div>
-
-              <div className="bg-[#0c1322] border border-amber-500/30 p-5 rounded-2xl flex items-center justify-between shadow-xl">
-                <div>
-                  <div className="text-xs text-amber-400 font-semibold">පොරොත්තුවේ ඇති (Pending)</div>
-                  <div className="text-2xl font-bold font-mono text-amber-300 mt-1">{slipStats.pending}</div>
-                </div>
-                <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center">
-                  <Clock className="w-5 h-5" />
-                </div>
-              </div>
-
-              <div className="bg-[#0c1322] border border-emerald-500/20 p-5 rounded-2xl flex items-center justify-between shadow-xl">
-                <div>
-                  <div className="text-xs text-slate-400">අනුමත කළ (Approved)</div>
-                  <div className="text-2xl font-bold font-mono text-emerald-400 mt-1">{slipStats.approved}</div>
-                </div>
-                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
-                  <CheckCircle className="w-5 h-5" />
-                </div>
-              </div>
-
-              <div className="bg-[#0c1322] border border-slate-800 p-5 rounded-2xl flex items-center justify-between shadow-xl">
-                <div>
-                  <div className="text-xs text-slate-400">ප්‍රතික්ෂේප කළ (Rejected)</div>
-                  <div className="text-2xl font-bold font-mono text-red-400 mt-1">{slipStats.rejected}</div>
-                </div>
-                <div className="w-10 h-10 rounded-xl bg-red-500/10 text-red-400 flex items-center justify-center">
-                  <X className="w-5 h-5" />
-                </div>
-              </div>
+              <span className="px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold">
+                {materials.length} Handouts
+              </span>
             </div>
 
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-[#0c1322] border border-slate-800 p-4 rounded-2xl shadow-xl">
-              <div className="flex items-center gap-2 bg-[#131c31] p-1.5 rounded-xl border border-slate-800 w-full sm:w-auto">
-                <button
-                  onClick={() => setSlipFilter('pending')}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
-                    slipFilter === 'pending' ? 'bg-amber-500 text-slate-950 font-bold shadow' : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <span>⏳ පොරොත්තුවේ ඇති</span>
-                  {slipStats.pending > 0 && (
-                    <span className="px-1.5 py-0.2 rounded-full bg-slate-900 text-amber-300 text-[10px] font-bold">
-                      {slipStats.pending}
-                    </span>
-                  )}
-                </button>
-                <button
-                  onClick={() => setSlipFilter('all')}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                    slipFilter === 'all' ? 'bg-purple-600 text-white shadow' : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  සියල්ල ({slipStats.total})
-                </button>
-                <button
-                  onClick={() => setSlipFilter('approved')}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                    slipFilter === 'approved' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  අනුමත ({slipStats.approved})
-                </button>
-                <button
-                  onClick={() => setSlipFilter('rejected')}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                    slipFilter === 'rejected' ? 'bg-red-600 text-white shadow' : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  ප්‍රතික්ෂේප ({slipStats.rejected})
-                </button>
-              </div>
-
-              <div className="flex items-center gap-3 w-full sm:w-auto">
-                <div className="relative flex-1 sm:w-64">
-                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
-                  <input
-                    type="text"
-                    placeholder="ශිෂ්‍යයා හෝ පන්තිය සොයන්න..."
-                    value={searchSlipQuery}
-                    onChange={(e) => setSearchSlipQuery(e.target.value)}
-                    className="w-full bg-[#131c31] border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
-                  />
-                </div>
-                <button
-                  onClick={fetchSlipsData}
-                  className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer"
-                  title="Refresh"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-
-            {loadingSlips ? (
-              <div className="p-16 text-center text-slate-400 text-sm">බැංකු රිසිට්පත් ලබාගනිමින් පවතී...</div>
-            ) : filteredSlips.length === 0 ? (
-              <div className="p-16 bg-[#0c1322] border border-slate-800 rounded-2xl text-center space-y-3">
-                <CreditCard className="w-12 h-12 text-slate-600 mx-auto" />
-                <h3 className="text-base font-bold text-white">මෙම වර්ගයේ රිසිට්පත් කිසිවක් නැත</h3>
+            {materials.length === 0 ? (
+              <div className="p-16 rounded-xl bg-slate-900/30 border border-dashed border-slate-800 text-center space-y-2">
+                <FileText className="w-10 h-10 text-slate-600 mx-auto" />
+                <h4 className="text-sm font-semibold text-slate-300">No study materials uploaded yet</h4>
+                <p className="text-xs text-slate-500">Materials will appear here once published by the teacher.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredSlips.map((slip) => {
-                  const formattedDate = new Date(slip.created_at).toLocaleDateString('si-LK', {
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {materials.map((mat) => (
+                  <div key={mat.id} className="p-5 rounded-2xl bg-[#131c31] border border-slate-800 hover:border-emerald-500/40 transition flex flex-col justify-between space-y-4 group">
+                    <div className="space-y-2">
+                      <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                        <FileText className="w-5 h-5" />
+                      </div>
+                      <h4 className="text-sm font-bold text-white group-hover:text-emerald-300 transition line-clamp-2">{mat.title}</h4>
+                      {mat.description && (
+                        <p className="text-xs text-slate-400 line-clamp-2">{mat.description}</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-3 pt-3 border-t border-slate-800/80">
+                      <div className="flex items-center justify-between text-[10px] text-slate-500">
+                        <span>📦 {mat.file_size || 'PDF'}</span>
+                        <span>📅 {new Date(mat.created_at).toLocaleDateString('en-US')}</span>
+                      </div>
+                      <a
+                        href={mat.file_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-emerald-600/20"
+                      >
+                        <Download className="w-4 h-4" />
+                        <span>Download PDF Handout</span>
+                      </a>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 3: ASSIGNMENTS & DEADLINES */}
+        {activeTab === 'assignments' && (
+          <div className="bg-[#0c1322] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Award className="w-5 h-5 text-amber-400" />
+                  <span>Assignments & Evaluations</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">Submit your homework and answer sheets before the specified deadline.</p>
+              </div>
+              <span className="px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold">
+                {assignments.length} Tasks
+              </span>
+            </div>
+
+            {assignments.length === 0 ? (
+              <div className="p-16 rounded-xl bg-slate-900/30 border border-dashed border-slate-800 text-center space-y-2">
+                <Award className="w-10 h-10 text-slate-600 mx-auto" />
+                <h4 className="text-sm font-semibold text-slate-300">No assignments posted yet</h4>
+                <p className="text-xs text-slate-500">New assignments will be shown here when published.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {assignments.map((assign) => {
+                  const isExpired = new Date(assign.due_date) < new Date();
+                  const submission = submissions.find(s => s.assignment_id === assign.id);
+                  const formattedDeadline = new Date(assign.due_date).toLocaleString('en-US', {
                     year: 'numeric',
                     month: 'short',
                     day: 'numeric',
@@ -2563,105 +740,125 @@ Learn ICT with Mano`;
                   });
 
                   return (
-                    <div
-                      key={slip.id}
-                      className="bg-[#0c1322] border border-slate-800/90 rounded-2xl p-5 shadow-xl flex flex-col justify-between space-y-4 hover:border-slate-700 transition"
-                    >
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span
-                            className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${
-                              slip.status === 'pending'
-                                ? 'bg-amber-500/10 border border-amber-500/30 text-amber-300'
-                                : slip.status === 'approved'
-                                ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400'
-                                : 'bg-red-500/10 border border-red-500/30 text-red-400'
-                            }`}
-                          >
-                            {slip.status === 'pending' ? '⏳ Review Pending' : slip.status === 'approved' ? '✅ Approved' : '❌ Rejected'}
+                    <div key={assign.id} className="p-5 rounded-2xl bg-[#131c31] border border-slate-800 hover:border-slate-700 transition space-y-4">
+                      
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-sm font-bold text-white">{assign.title}</h4>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                              submission 
+                                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                : isExpired 
+                                ? 'bg-red-500/20 text-red-400 border border-red-500/30' 
+                                : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                            }`}>
+                              {submission ? '✅ Submitted' : isExpired ? '⛔ Closed (Late)' : '⏳ Open (Active)'}
+                            </span>
+                          </div>
+                          {assign.description && (
+                            <p className="text-xs text-slate-400">{assign.description}</p>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          <span className="font-mono text-xs font-bold text-purple-300 bg-purple-500/10 px-3 py-1 rounded-xl border border-purple-500/20">
+                            🎯 Max Marks: {assign.total_marks}
                           </span>
-                          <span className="text-[10px] text-slate-500">{formattedDate}</span>
-                        </div>
-
-                        <div>
-                          <h4 className="text-sm font-bold text-white">{slip.studentName}</h4>
-                          <div className="flex items-center gap-3 text-xs text-slate-400 mt-0.5">
-                            <span className="font-mono text-purple-400">@{slip.studentUsername}</span>
-                            {slip.studentPhone && (
-                              <a
-                                href={`https://wa.me/94${slip.studentPhone.replace(/^0/, '')}`}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-emerald-400 hover:underline flex items-center gap-1 text-[11px]"
-                              >
-                                💬 {slip.studentPhone}
-                              </a>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="p-3 rounded-xl bg-[#131c31] border border-slate-800 space-y-1 text-xs">
-                          <div className="text-slate-400 text-[10px]">අදාළ පන්තිය:</div>
-                          <div className="font-semibold text-slate-200 line-clamp-1">{slip.course_name || 'පන්තිය'}</div>
-                          <div className="flex items-center justify-between pt-1 border-t border-slate-800/80">
-                            <span className="text-[10px] text-slate-400">ගෙවූ මුදල:</span>
-                            <span className="font-mono font-bold text-emerald-400">Rs. {slip.amount || '0'}/-</span>
-                          </div>
-                        </div>
-
-                        <div
-                          onClick={() => setPreviewSlip(slip)}
-                          className="relative aspect-video rounded-xl bg-slate-900 border border-slate-800 overflow-hidden cursor-pointer group flex items-center justify-center"
-                        >
-                          <img
-                            src={slip.slip_url}
-                            alt="Bank Slip"
-                            className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                          />
-                          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-1.5 text-xs text-white font-semibold">
-                            <Eye className="w-4 h-4" />
-                            <span>රිසිට්පත බලන්න</span>
-                          </div>
                         </div>
                       </div>
 
-                      <div className="pt-2 border-t border-slate-800/80">
-                        {slip.status === 'pending' ? (
-                          <div className="flex items-center gap-2">
-                            <button
-                              disabled={processingSlipId === slip.id}
-                              onClick={() => handleApproveSlip(slip)}
-                              className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-lg shadow-emerald-600/20"
-                            >
-                              <Check className="w-3.5 h-3.5" />
-                              <span>{processingSlipId === slip.id ? 'Approve වෙමින්...' : 'Approve (මාසය සක්‍රිය)'}</span>
-                            </button>
-                            <button
-                              disabled={processingSlipId === slip.id}
-                              onClick={() => handleRejectSlip(slip)}
-                              className="p-2.5 bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-slate-700/60 rounded-xl transition cursor-pointer"
-                              title="ප්‍රතික්ෂේප කරන්න"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
+                      <div className="flex flex-wrap items-center justify-between gap-3 text-xs bg-[#0c1322] p-3 rounded-xl border border-slate-800/80">
+                        <span className="flex items-center gap-1.5 font-semibold text-amber-300">
+                          <Clock className="w-4 h-4 text-amber-400" />
+                          <span>Deadline: {formattedDeadline}</span>
+                        </span>
+
+                        {assign.file_url && (
+                          <a
+                            href={assign.file_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-blue-400 hover:underline flex items-center gap-1 font-semibold"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                            <span>Download Question Paper (PDF)</span>
+                          </a>
+                        )}
+                      </div>
+
+                      {/* Submission Area */}
+                      <div className="pt-2 border-t border-slate-800">
+                        {submission ? (
+                          <div className="p-3 rounded-xl bg-emerald-950/20 border border-emerald-500/30 flex flex-wrap items-center justify-between gap-3">
+                            <div className="flex items-center gap-2 text-xs text-emerald-300">
+                              <CheckCircle className="w-4 h-4 text-emerald-400" />
+                              <span>You submitted this assignment on {new Date(submission.submitted_at).toLocaleDateString('en-US')}.</span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              {submission.marks !== null && (
+                                <span className="font-mono font-bold text-xs text-emerald-400">
+                                  Marks: {submission.marks} / {assign.total_marks}
+                                </span>
+                              )}
+                              <a
+                                href={submission.submission_file_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-xs text-blue-400 hover:underline flex items-center gap-1"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                                <span>View Your Answer Sheet</span>
+                              </a>
+                            </div>
+                          </div>
+                        ) : isExpired ? (
+                          <div className="text-xs text-red-400 flex items-center gap-1.5 p-2 bg-red-500/10 rounded-xl border border-red-500/20">
+                            <AlertCircle className="w-4 h-4" />
+                            <span>The submission deadline for this assignment has passed.</span>
                           </div>
                         ) : (
-                          <div className="flex items-center justify-between py-1 text-[11px] text-slate-500">
-                            <span>{slip.status === 'approved' ? 'මෙම රිසිට්පත අනුමත කර ඇත.' : 'මෙම රිසිට්පත ප්‍රතික්ෂේප කර ඇත.'}</span>
-                            
-                            {/* 🗑️ Delete Button for Approved/Rejected Slips */}
-                            <button
-                              disabled={processingSlipId === slip.id}
-                              onClick={() => handleDeleteSlip(slip)}
-                              className="px-2.5 py-1 rounded-lg bg-red-600/10 hover:bg-red-600 text-red-400 hover:text-white border border-red-500/30 text-[10px] font-semibold transition cursor-pointer flex items-center gap-1 shadow-sm"
-                              title="රිසිට්පත පද්ධතියෙන් ඉවත් කරන්න (Delete)"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                              <span>Delete</span>
-                            </button>
+                          <div>
+                            {submittingAssignId === assign.id ? (
+                              <div className="p-4 rounded-xl bg-[#0c1322] border border-amber-500/40 space-y-3">
+                                <h5 className="text-xs font-bold text-white">Upload Answer Sheet (PDF or Image)</h5>
+                                <input
+                                  type="file"
+                                  required
+                                  accept=".pdf,image/*"
+                                  onChange={(e) => setSubmissionFile(e.target.files?.[0] || null)}
+                                  className="w-full text-xs text-slate-300 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-amber-600/20 file:text-amber-400 hover:file:bg-amber-600/30 cursor-pointer bg-[#131c31] border border-slate-700 rounded-xl p-2"
+                                />
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => handleSubmitAssignment(assign.id)}
+                                    disabled={uploadingSubmission}
+                                    className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs rounded-xl transition cursor-pointer shadow-lg shadow-amber-600/20 disabled:opacity-50 flex items-center gap-1.5"
+                                  >
+                                    <UploadCloud className="w-4 h-4" />
+                                    <span>{uploadingSubmission ? 'Uploading...' : 'Submit Answer Sheet'}</span>
+                                  </button>
+                                  <button
+                                    onClick={() => { setSubmittingAssignId(null); setSubmissionFile(null); }}
+                                    className="px-3 py-2 bg-slate-800 text-slate-400 hover:text-white text-xs rounded-xl transition"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setSubmittingAssignId(assign.id)}
+                                className="px-4 py-2 bg-amber-600/20 hover:bg-amber-600 text-amber-300 hover:text-white border border-amber-500/30 font-bold text-xs rounded-xl transition cursor-pointer flex items-center gap-1.5"
+                              >
+                                <UploadCloud className="w-4 h-4" />
+                                <span>📤 Submit Answer Sheet</span>
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>
+
                     </div>
                   );
                 })}
@@ -2672,299 +869,77 @@ Learn ICT with Mano`;
 
       </main>
 
-      {/* MODAL: PREVIEW SLIP */}
-      {previewSlip && (
-        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-[#0c1322] border border-slate-800 max-w-2xl w-full rounded-3xl p-6 space-y-5 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+      {/* 💳 MODAL: UPLOAD BANK SLIP */}
+      {showSlipModal && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-[#0c1322] border border-slate-800 max-w-md w-full rounded-3xl p-6 sm:p-7 space-y-5 shadow-2xl relative">
             <button
-              onClick={() => setPreviewSlip(null)}
+              onClick={() => { setShowSlipModal(false); setSlipSuccessMsg(false); }}
               className="absolute right-5 top-5 p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
 
-            <div className="flex items-center justify-between pr-8">
-              <div>
-                <h3 className="text-base font-bold text-white flex items-center gap-2">
-                  <CreditCard className="w-4 h-4 text-purple-400" />
-                  බැංකු රිසිට්පත් පරීක්ෂාව
-                </h3>
-                <p className="text-xs text-slate-400">
-                  {previewSlip.studentName} (@{previewSlip.studentUsername}) • {previewSlip.course_name}
-                </p>
-              </div>
-              <span className="font-mono font-bold text-emerald-400 text-sm">
-                Rs. {previewSlip.amount}/-
-              </span>
-            </div>
-
-            <div className="rounded-2xl border border-slate-800 overflow-hidden bg-slate-950 flex items-center justify-center max-h-[60vh]">
-              <img
-                src={previewSlip.slip_url}
-                alt="Full Slip Preview"
-                className="w-full h-auto max-h-[60vh] object-contain"
-              />
-            </div>
-
-            <div className="flex items-center justify-between gap-3 pt-2">
-              <a
-                href={previewSlip.slip_url}
-                target="_blank"
-                rel="noreferrer"
-                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span>මුල් ගොනුව විවෘත කරන්න</span>
-              </a>
-
-              {previewSlip.status === 'pending' ? (
-                <div className="flex items-center gap-2">
-                  <button
-                    disabled={processingSlipId === previewSlip.id}
-                    onClick={() => handleRejectSlip(previewSlip)}
-                    className="px-4 py-2.5 rounded-xl bg-red-600/10 border border-red-500/30 hover:bg-red-600 hover:text-white text-red-400 text-xs font-bold transition cursor-pointer"
-                  >
-                    ප්‍රතික්ෂේප කරන්න
-                  </button>
-                  <button
-                    disabled={processingSlipId === previewSlip.id}
-                    onClick={() => handleApproveSlip(previewSlip)}
-                    className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition shadow-lg shadow-emerald-600/20 cursor-pointer"
-                  >
-                    {processingSlipId === previewSlip.id ? 'Approve වෙමින්...' : '✅ Approve (මාසය සක්‍රිය)'}
-                  </button>
-                </div>
-              ) : (
-                <button
-                  disabled={processingSlipId === previewSlip.id}
-                  onClick={() => handleDeleteSlip(previewSlip)}
-                  className="px-4 py-2.5 rounded-xl bg-red-600/20 hover:bg-red-600 text-red-300 hover:text-white border border-red-500/30 text-xs font-bold transition cursor-pointer flex items-center gap-1.5"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  <span>මෙම රිසිට්පත Delete කරන්න</span>
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 📝 MODAL: GRADING & SUBMISSIONS VIEWER */}
-      {gradingModalAssignment && (
-        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-[#0c1322] border border-slate-800 max-w-3xl w-full rounded-3xl p-6 sm:p-7 space-y-5 shadow-2xl relative max-h-[90vh] overflow-y-auto">
-            <button
-              onClick={() => setGradingModalAssignment(null)}
-              className="absolute right-5 top-5 p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-
-            <div className="flex items-center gap-3 pb-3 border-b border-slate-800 pr-8">
+            <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400">
-                <Award className="w-5 h-5" />
+                <CreditCard className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white flex items-center gap-2">
-                  {gradingModalAssignment.title}
-                  <span className="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 text-[10px] font-bold">
-                    උපරිම ලකුණු: {gradingModalAssignment.total_marks}
-                  </span>
-                </h3>
-                <p className="text-xs text-slate-400">සිසුන් භාරදුන් පිළිතුරු පත්‍ර පරීක්ෂාව සහ ලකුණු ලබාදීම</p>
+                <h3 className="text-base font-bold text-white">Bank Deposit Slip Submission</h3>
+                <p className="text-xs text-slate-400">{activeCourse?.title}</p>
               </div>
             </div>
 
-            {loadingSubmissions ? (
-              <div className="p-12 text-center text-slate-400 text-xs">පිළිතුරු පත්‍ර ලබාගනිමින් පවතී...</div>
-            ) : assignmentSubmissionsList.length === 0 ? (
-              <div className="p-12 rounded-2xl bg-[#131c31] border border-dashed border-slate-800 text-center space-y-2">
-                <Award className="w-10 h-10 text-slate-600 mx-auto" />
-                <h4 className="text-sm font-semibold text-slate-300">තවමත් කිසිදු ශිෂ්‍යයෙකු පිළිතුරු පත්‍ර භාරදී නොමැත</h4>
-                <p className="text-xs text-slate-500">සිසුන් පිළිතුරු පත්‍ර Upload කළ පසු මෙහි ලැයිස්තුගත වනු ඇත.</p>
+            <div className="p-3.5 rounded-xl bg-[#131c31] border border-slate-800 text-xs space-y-1 text-slate-300">
+              <div className="font-semibold text-amber-300">🏦 Class Fee Deposit Account Details:</div>
+              <p className="font-mono text-white text-[13px]">BOC / Commercial Bank</p>
+              <p className="text-slate-400 text-[11px]">Account Name: Learn ICT with Mano</p>
+            </div>
+
+            {slipSuccessMsg ? (
+              <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
+                <Check className="w-5 h-5 text-emerald-400 shrink-0" />
+                <span>Deposit slip submitted successfully! Access will be activated upon teacher review.</span>
               </div>
             ) : (
-              <div className="space-y-4">
-                <div className="text-xs text-slate-400 font-semibold">
-                  භාරදුන් පිළිතුරු පත්‍ර ගණන: <strong className="text-emerald-400 font-mono">{assignmentSubmissionsList.length}</strong>
-                </div>
-
-                <div className="space-y-3">
-                  {assignmentSubmissionsList.map((sub) => {
-                    const formattedDate = new Date(sub.submitted_at).toLocaleString('si-LK', {
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    });
-
-                    return (
-                      <div key={sub.id} className="p-4 rounded-2xl bg-[#131c31] border border-slate-800 space-y-3">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-800/80">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold text-white text-xs">{sub.studentName}</span>
-                              <span className="font-mono text-purple-400 text-[11px]">@{sub.studentUsername}</span>
-                              <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
-                                sub.marks !== null && sub.marks !== undefined
-                                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                                  : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                              }`}>
-                                {sub.marks !== null && sub.marks !== undefined ? `✅ Graded (${sub.marks}/${gradingModalAssignment.total_marks})` : '⏳ Review Pending'}
-                              </span>
-                            </div>
-                            <div className="text-[10px] text-slate-500 mt-0.5">
-                              📅 භාරදුන් දිනය: {formattedDate}
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            {sub.studentPhone && (
-                              <a
-                                href={`https://wa.me/94${sub.studentPhone.replace(/[^0-9]/g, '').replace(/^0/, '')}`}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="px-2.5 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-600 hover:text-white text-emerald-400 text-[11px] font-semibold transition border border-emerald-500/30 flex items-center gap-1"
-                              >
-                                <MessageSquare className="w-3 h-3" />
-                                <span>WhatsApp</span>
-                              </a>
-                            )}
-
-                            <a
-                              href={sub.submission_file_url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-bold transition flex items-center gap-1.5 shadow"
-                            >
-                              <ExternalLink className="w-3.5 h-3.5" />
-                              <span>📄 පිළිතුරු පත්‍රය බලන්න</span>
-                            </a>
-                          </div>
-                        </div>
-
-                        {/* Marks Input & Feedback Controls */}
-                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-1">
-                          <div className="flex items-center gap-2">
-                            <label className="text-xs font-semibold text-slate-300 shrink-0">ලකුණු:</label>
-                            <input
-                              type="number"
-                              placeholder="ලකුණු"
-                              value={marksInputMap[sub.id] ?? ''}
-                              onChange={(e) => setMarksInputMap(prev => ({ ...prev, [sub.id]: e.target.value }))}
-                              className="w-20 bg-[#0c1322] border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-emerald-400 font-mono font-bold focus:outline-none focus:border-amber-500 text-center"
-                            />
-                            <span className="text-xs text-slate-500 font-mono">/ {gradingModalAssignment.total_marks}</span>
-                          </div>
-
-                          <div className="flex-1">
-                            <input
-                              type="text"
-                              placeholder="ගුරු සටහන / Feedback (උදා: විශිෂ්ටයි! / ප්‍රශ්න අංක 3 නැවත බලන්න)"
-                              value={feedbackInputMap[sub.id] ?? ''}
-                              onChange={(e) => setFeedbackInputMap(prev => ({ ...prev, [sub.id]: e.target.value }))}
-                              className="w-full bg-[#0c1322] border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500"
-                            />
-                          </div>
-
-                          <button
-                            disabled={savingMarksId === sub.id}
-                            onClick={() => handleSaveMarks(sub)}
-                            className="px-4 py-1.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition cursor-pointer shadow-md flex items-center justify-center gap-1.5 shrink-0"
-                          >
-                            <Check className="w-3.5 h-3.5" />
-                            <span>{savingMarksId === sub.id ? 'සුරැකෙමින්...' : 'ලකුණු සුරකින්න'}</span>
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: CREATE NEW COURSE */}
-      {showAddCourseModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#0c1322] border border-slate-800 max-w-md w-full rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl relative">
-            <button
-              onClick={() => setShowAddCourseModal(false)}
-              className="absolute right-5 top-5 p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-
-            <div className="space-y-1">
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <BookOpen className="w-5 h-5 text-purple-400" />
-                නව පන්තියක් සකස් කිරීම
-              </h3>
-            </div>
-
-            <form onSubmit={handleCreateCourse} className="space-y-4">
-              <div>
-                <label className="text-xs text-slate-300 block mb-1.5">පන්තියේ නම (Course Title) *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="උදා: Grade 8 ICT - Theory & Practical"
-                  value={newCourseTitle}
-                  onChange={(e) => setNewCourseTitle(e.target.value)}
-                  className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-purple-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
+              <form onSubmit={handleUploadSlip} className="space-y-4">
                 <div>
-                  <label className="text-xs text-slate-300 block mb-1.5">ප්‍රවර්ගය (Category) *</label>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Amount Paid (Rs.) *
+                  </label>
                   <input
-                    type="text"
+                    type="number"
                     required
-                    placeholder="Grade 8 ICT"
-                    value={newCourseCategory}
-                    onChange={(e) => setNewCourseCategory(e.target.value)}
-                    className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-purple-500"
+                    placeholder="1500"
+                    value={slipAmount}
+                    onChange={(e) => setSlipAmount(e.target.value)}
+                    className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-emerald-400 font-mono focus:outline-none focus:border-amber-500"
                   />
                 </div>
+
                 <div>
-                  <label className="text-xs text-slate-300 block mb-1.5">වර්ගය (Type) *</label>
-                  <select
-                    value={newCourseType}
-                    onChange={(e) => setNewCourseType(e.target.value)}
-                    className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-purple-500"
-                  >
-                    <option value="Theory">Theory</option>
-                    <option value="Practical">Practical</option>
-                    <option value="Revision">Revision</option>
-                    <option value="Paper">Paper Class</option>
-                  </select>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Attach Deposit Slip Photo or PDF *
+                  </label>
+                  <input
+                    type="file"
+                    required
+                    accept="image/*,.pdf"
+                    onChange={(e) => setSlipFile(e.target.files?.[0] || null)}
+                    className="w-full text-xs text-slate-300 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-amber-600/20 file:text-amber-400 hover:file:bg-amber-600/30 cursor-pointer bg-[#131c31] border border-slate-700 rounded-xl p-2"
+                  />
                 </div>
-              </div>
 
-              <div>
-                <label className="text-xs text-slate-300 block mb-1.5">මාසික පන්ති ගාස්තුව (Rs.) *</label>
-                <input
-                  type="number"
-                  required
-                  placeholder="1500"
-                  value={newCourseFee}
-                  onChange={(e) => setNewCourseFee(e.target.value)}
-                  className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-emerald-400 font-mono focus:outline-none focus:border-purple-500"
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={creatingCourse}
-                className="w-full py-3 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition cursor-pointer shadow-lg shadow-purple-600/30"
-              >
-                {creatingCourse ? 'එක්වෙමින් පවතී...' : '+ මෙම පන්තිය සුරකින්න'}
-              </button>
-            </form>
+                <button
+                  type="submit"
+                  disabled={uploadingSlip}
+                  className="w-full py-3 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-bold rounded-xl text-xs transition shadow-lg shadow-amber-600/20 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <UploadCloud className="w-4 h-4" />
+                  <span>{uploadingSlip ? 'Uploading...' : 'Confirm & Submit Deposit Slip'}</span>
+                </button>
+              </form>
+            )}
           </div>
         </div>
       )}

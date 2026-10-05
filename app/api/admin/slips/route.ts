@@ -50,10 +50,10 @@ export async function GET() {
         slip_url: s.slip_url,
         status: s.status || 'pending',
         created_at: s.created_at,
-        studentName: u?.user_metadata?.full_name || 'ශිෂ්‍යයා',
+        studentName: u?.user_metadata?.full_name || 'Student',
         studentUsername: u?.user_metadata?.username || u?.email?.split('@')[0] || 'student',
         studentPhone: u?.user_metadata?.phone || '',
-        course_name: courseMap.get(s.course_id?.toString()) || 'පන්තිය',
+        course_name: courseMap.get(s.course_id?.toString()) || 'Course',
       };
     });
 
@@ -88,7 +88,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Slip ID is required' }, { status: 400 });
     }
 
-    // 1. APPROVE SLIP
     if (action === 'approve') {
       const { error: slipErr } = await supabaseAdmin
         .from('slips')
@@ -129,10 +128,9 @@ export async function POST(req: Request) {
         }
       }
 
-      return NextResponse.json({ success: true, message: 'රිසිට්පත අනුමත කර මෙම මාසය සඳහා පන්තිය සක්‍රිය කරන ලදී!' });
+      return NextResponse.json({ success: true, message: 'Bank slip approved and access activated successfully!' });
     }
 
-    // 2. REJECT SLIP
     if (action === 'reject') {
       const { error: rejectErr } = await supabaseAdmin
         .from('slips')
@@ -141,10 +139,9 @@ export async function POST(req: Request) {
 
       if (rejectErr) throw rejectErr;
 
-      return NextResponse.json({ success: true, message: 'රිසිට්පත ප්‍රතික්ෂේප කරන ලදී.' });
+      return NextResponse.json({ success: true, message: 'Bank slip rejected.' });
     }
 
-    // 3. DELETE SLIP (අවශ්‍ය විට පද්ධතියෙන් ඉවත් කිරීම)
     if (action === 'delete') {
       const { error: deleteErr } = await supabaseAdmin
         .from('slips')
@@ -153,7 +150,7 @@ export async function POST(req: Request) {
 
       if (deleteErr) throw deleteErr;
 
-      return NextResponse.json({ success: true, message: 'රිසිට්පත සාර්ථකව ඉවත් කරන ලදී!' });
+      return NextResponse.json({ success: true, message: 'Bank slip deleted successfully!' });
     }
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });

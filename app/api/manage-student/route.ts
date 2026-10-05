@@ -9,9 +9,9 @@ function getAdminClient() {
   );
 }
 
-const MONTH_NAMES_SINHALA = [
-  'ජනවාරි', 'පෙබරවාරි', 'මාර්තු', 'අප්‍රේල්', 'මැයි', 'ජූනි',
-  'ජූලි', 'අගෝස්තු', 'සැප්තැම්බර්', 'ඔක්තෝබර්', 'නොවැම්බර්', 'දෙසැම්බර්'
+const MONTH_NAMES_ENGLISH = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
 // GET: Fetch students with monthly payment status & automatic tracking
@@ -46,8 +46,8 @@ export async function GET(req: Request) {
     const now = new Date();
     const currentMonthIdx = now.getMonth();
     const currentYear = now.getFullYear();
-    const currentMonthName = MONTH_NAMES_SINHALA[currentMonthIdx];
-    const nextMonthName = MONTH_NAMES_SINHALA[(currentMonthIdx + 1) % 12];
+    const currentMonthName = MONTH_NAMES_ENGLISH[currentMonthIdx];
+    const nextMonthName = MONTH_NAMES_ENGLISH[(currentMonthIdx + 1) % 12];
 
     const students = (enrollments || []).map((e: any) => {
       const u = usersMap.get(e.user_id);
@@ -59,32 +59,31 @@ export async function GET(req: Request) {
 
       if (isManuallySuspended) {
         isPaidForCurrentMonth = false;
-        monthStatusText = 'ප්‍රවේශය අත්හිටුවා ඇත (Suspended)';
+        monthStatusText = 'Access Suspended';
       } else if (validUntilDate) {
         const validYear = validUntilDate.getFullYear();
         const validMonthIdx = validUntilDate.getMonth();
-        const validMonthName = MONTH_NAMES_SINHALA[validMonthIdx];
+        const validMonthName = MONTH_NAMES_ENGLISH[validMonthIdx];
 
-        // Check if student's access covers current month or beyond
         if (validYear > currentYear || (validYear === currentYear && validMonthIdx > currentMonthIdx)) {
           isPaidForCurrentMonth = true;
-          monthStatusText = `${validMonthName} මාසය දක්වා සක්‍රීයයි`;
+          monthStatusText = `Active through ${validMonthName}`;
         } else if (validYear === currentYear && validMonthIdx === currentMonthIdx) {
           isPaidForCurrentMonth = true;
-          monthStatusText = `${currentMonthName} මාසයට ගිණුම සක්‍රීයයි`;
+          monthStatusText = `Active for ${currentMonthName}`;
         } else {
           isPaidForCurrentMonth = false;
-          monthStatusText = `${currentMonthName} මාසයට ගෙවා නොමැත (Unpaid)`;
+          monthStatusText = `Unpaid for ${currentMonthName}`;
         }
       } else {
         isPaidForCurrentMonth = false;
-        monthStatusText = `${currentMonthName} මාසයට ගෙවා නොමැත (Unpaid)`;
+        monthStatusText = `Unpaid for ${currentMonthName}`;
       }
 
       return {
         enrollmentId: e.id,
         userId: e.user_id,
-        fullName: u?.user_metadata?.full_name || 'ශිෂ්‍යයා',
+        fullName: u?.user_metadata?.full_name || 'Student',
         username: u?.user_metadata?.username || u?.email?.split('@')[0] || 'student',
         phone: u?.user_metadata?.phone || '',
         password: u?.user_metadata?.initial_password || u?.user_metadata?.password || 'Mano#2026',
@@ -153,7 +152,7 @@ export async function POST(req: Request) {
     // 3. Reset Single Device
     if (action === 'reset_device') {
       const { data: userData, error: userErr } = await supabaseAdmin.auth.admin.getUserById(userId);
-      if (userErr || !userData.user) throw new Error('ශිෂ්‍යයා හමු නොවීය.');
+      if (userErr || !userData.user) throw new Error('Student not found.');
 
       const { error: updateErr } = await supabaseAdmin.auth.admin.updateUserById(userId, {
         user_metadata: { ...userData.user.user_metadata, device_id: null },

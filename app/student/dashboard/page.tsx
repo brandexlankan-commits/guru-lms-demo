@@ -18,7 +18,7 @@ export default function StudentDashboard() {
   const [courses, setCourses] = useState<any[]>([]);
   const [activeCourse, setActiveCourse] = useState<any | null>(null);
 
-  // Active Main Tab: Videos / Tutes / Assignments
+  // Active Main Tab: Videos / Materials / Assignments
   const [activeTab, setActiveTab] = useState<'videos' | 'materials' | 'assignments'>('videos');
 
   // Course Data States
@@ -131,7 +131,7 @@ export default function StudentDashboard() {
         setActiveRecording(null);
       }
 
-      // 3. Fetch Tutes / Materials (Dual-table fetch)
+      // 3. Fetch Tutes / Materials
       let matsData: any[] = [];
       const { data: mats } = await supabase
         .from('course_materials')
@@ -184,7 +184,7 @@ export default function StudentDashboard() {
   };
 
   const handleLogout = async () => {
-    if (confirm('ඔබට පද්ධතියෙන් නික්මීමට (Log out) අවශ්‍ය බව සහතිකද?')) {
+    if (confirm('Are you sure you want to log out?')) {
       await supabase.auth.signOut();
       router.push('/login');
     }
@@ -201,7 +201,7 @@ export default function StudentDashboard() {
 
   const handleSubmitAssignment = async (assignmentId: string) => {
     if (!submissionFile || !currentUser) {
-      alert('කරුණාකර ඔබේ පිළිතුරු පත්‍රයේ PDF හෝ Image ගොනුවක් තෝරන්න.');
+      alert('Please select your answer sheet (PDF or Image file).');
       return;
     }
 
@@ -236,12 +236,12 @@ export default function StudentDashboard() {
 
       if (dbErr) throw dbErr;
 
-      alert('ඔබගේ පිළිතුරු පත්‍රය සාර්ථකව භාරදෙන ලදී! (Submitted)');
+      alert('Answer sheet submitted successfully!');
       setSubmissions(prev => [subData, ...prev.filter(s => s.assignment_id !== assignmentId)]);
       setSubmittingAssignId(null);
       setSubmissionFile(null);
     } catch (err: any) {
-      alert('භාරදීම අසාර්ථක විය: ' + err.message);
+      alert('Submission failed: ' + err.message);
     } finally {
       setUploadingSubmission(false);
     }
@@ -250,7 +250,7 @@ export default function StudentDashboard() {
   const handleUploadSlip = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!slipFile || !currentUser || !activeCourse) {
-      alert('කරුණාකර බැංකු රිසිට්පත තෝරන්න.');
+      alert('Please select a bank slip file.');
       return;
     }
 
@@ -292,7 +292,7 @@ export default function StudentDashboard() {
         setSlipSuccessMsg(false);
       }, 2500);
     } catch (err: any) {
-      alert('දෝෂයකි: ' + err.message);
+      alert('Error: ' + err.message);
     } finally {
       setUploadingSlip(false);
     }
@@ -319,7 +319,7 @@ export default function StudentDashboard() {
               <h1 className="text-base sm:text-lg font-black tracking-tight text-white flex items-center gap-2">
                 Learn ICT with Mano
               </h1>
-              <p className="text-[11px] sm:text-xs text-slate-400">Student Portal • ආයුබෝවන්, <span className="text-purple-300 font-mono">@{username}</span></p>
+              <p className="text-[11px] sm:text-xs text-slate-400">Student Portal • Welcome, <span className="text-purple-300 font-mono">@{username}</span></p>
             </div>
           </div>
 
@@ -367,14 +367,14 @@ export default function StudentDashboard() {
           <div className="bg-red-950/40 border border-red-500/40 p-5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-2xl">
             <div className="flex items-center gap-3.5">
               <div className="w-12 h-12 rounded-xl bg-red-500/20 border border-red-500/30 flex items-center justify-center text-red-400 text-2xl shrink-0">
-                ⚠️
+                ⚠️️
               </div>
               <div>
                 <h3 className="text-sm sm:text-base font-bold text-red-300">
-                  {isCourseSuspended ? 'මෙම පන්තිය සඳහා ඔබගේ ප්‍රවේශය තාවකාලිකව අත්හිටුවා ඇත' : 'පන්ති ගාස්තු වලංගු කාලය අවසන් වී ඇත'}
+                  {isCourseSuspended ? 'Access Temporarily Suspended for this Course' : 'Tuition Fee Access Period Has Expired'}
                 </h3>
                 <p className="text-xs text-slate-300 mt-0.5">
-                  කරුණාකර මෙම මාසයේ පන්ති ගාස්තු ගෙවා ඔබගේ බැංකු රිසිට්පත මෙතැනින් Upload කරන්න.
+                  Please complete your monthly class fee payment and upload your bank deposit slip here.
                 </p>
               </div>
             </div>
@@ -384,7 +384,7 @@ export default function StudentDashboard() {
               className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-lg transition flex items-center justify-center gap-2 cursor-pointer shrink-0"
             >
               <CreditCard className="w-4 h-4" />
-              <span>💳 රිසිට්පත Upload කරන්න</span>
+              <span>💳 Upload Bank Slip</span>
             </button>
           </div>
         )}
@@ -400,8 +400,8 @@ export default function StudentDashboard() {
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                වලංගු කාලය: <strong className={isCourseSuspended || isCourseExpired ? 'text-red-400' : 'text-emerald-400'}>
-                  {isCourseSuspended ? 'අත්හිටුවා ඇත (Suspended)' : activeCourse.validUntil ? `${new Date(activeCourse.validUntil).toLocaleDateString('si-LK')} දක්වා` : 'Active'}
+                Validity: <strong className={isCourseSuspended || isCourseExpired ? 'text-red-400' : 'text-emerald-400'}>
+                  {isCourseSuspended ? 'Suspended' : activeCourse.validUntil ? `Until ${new Date(activeCourse.validUntil).toLocaleDateString('en-US')}` : 'Active'}
                 </strong>
               </p>
             </div>
@@ -420,7 +420,7 @@ export default function StudentDashboard() {
                 className="px-4 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/40 font-bold text-xs transition flex items-center gap-1.5 cursor-pointer shadow-md"
               >
                 <CreditCard className="w-4 h-4" />
-                <span>💳 රිසිට්පත් Upload (Bank Slip)</span>
+                <span>💳 Upload Bank Slip</span>
               </button>
             </div>
           </div>
@@ -437,7 +437,7 @@ export default function StudentDashboard() {
             }`}
           >
             <Video className="w-4 h-4" />
-            <span>🎥 වීඩියෝ සහ Live ({recordings.length})</span>
+            <span>🎥 Videos & Live ({recordings.length})</span>
           </button>
 
           <button
@@ -449,7 +449,7 @@ export default function StudentDashboard() {
             }`}
           >
             <FileText className="w-4 h-4 text-emerald-400" />
-            <span>📑 ටියූට් සහ සටහන් ({materials.length})</span>
+            <span>📑 Handouts & Tutes ({materials.length})</span>
           </button>
 
           <button
@@ -461,7 +461,7 @@ export default function StudentDashboard() {
             }`}
           >
             <Award className="w-4 h-4 text-amber-400" />
-            <span>📝 පැවරුම් (Assignments) ({assignments.length})</span>
+            <span>📝 Assignments & Tasks ({assignments.length})</span>
           </button>
         </div>
 
@@ -492,12 +492,12 @@ export default function StudentDashboard() {
                   rel="noreferrer"
                   className="w-full sm:w-auto px-6 py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-lg shadow-purple-600/30 transition text-center cursor-pointer flex items-center justify-center gap-2"
                 >
-                  <span>🎥 Zoom පන්තියට සම්බන්ධ වන්න</span>
+                  <span>🎥 Join Live Zoom Class</span>
                 </a>
               </div>
             ) : (
               <div className="bg-[#0c1322] border border-slate-800 p-4 rounded-2xl text-center text-xs text-slate-500">
-                මෙම පන්තියට මේ මොහොතේ සජීවී Zoom කාලසටහනක් නොමැත.
+                No live Zoom classes currently scheduled for this course.
               </div>
             )}
 
@@ -507,7 +507,7 @@ export default function StudentDashboard() {
                 <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                   <div className="flex items-center gap-2">
                     <Film className="w-5 h-5 text-red-500" />
-                    <h3 className="font-bold text-sm">ආරක්ෂිත Class Recordings</h3>
+                    <h3 className="font-bold text-sm">Protected Class Recordings</h3>
                     <span className="text-[10px] bg-red-500/10 border border-red-500/20 text-red-400 px-2.5 py-0.5 rounded-full font-bold ml-2">
                       YouTube Package Data
                     </span>
@@ -517,7 +517,7 @@ export default function StudentDashboard() {
                     <button
                       onClick={toggleFullScreen}
                       className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer border border-slate-700/60"
-                      title="සම්පූර්ණ තිරය (Fullscreen)"
+                      title="Fullscreen"
                     >
                       {isFullscreen ? <Minimize className="w-3.5 h-3.5" /> : <Maximize className="w-3.5 h-3.5" />}
                       <span className="text-[11px]">{isFullscreen ? 'Exit Fullscreen' : '⛶ Fullscreen'}</span>
@@ -547,11 +547,11 @@ export default function StudentDashboard() {
                           className="absolute top-4 right-4 z-40 px-3.5 py-2 rounded-xl bg-black/85 hover:bg-purple-600 text-white text-xs font-bold flex items-center gap-1.5 border border-white/20 shadow-2xl backdrop-blur-md cursor-pointer transition transform hover:scale-105"
                         >
                           <Minimize className="w-4 h-4 text-purple-300" />
-                          <span>Exit Fullscreen (කුඩා කරන්න)</span>
+                          <span>Exit Fullscreen</span>
                         </button>
                       )}
 
-                      {/* 2. Top-Shield: Title සහ Channel Block කිරීම (දකුණු පස Settings Gear සඳහා right-32 නිදහස් කර ඇත) */}
+                      {/* 2. Top-Shield: Title & Channel overlay */}
                       <div 
                         className="absolute top-0 left-0 right-32 h-16 z-20 bg-transparent cursor-default pointer-events-auto" 
                         onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
@@ -560,7 +560,7 @@ export default function StudentDashboard() {
                         onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); }}
                       />
 
-                      {/* 3. Bottom-Left Shield: Copy Link Icon (🔗) Block කිරීම */}
+                      {/* 3. Bottom-Left Shield: Copy Link Icon overlay */}
                       <div 
                         className="absolute bottom-0 left-0 w-36 h-24 z-20 bg-transparent cursor-default pointer-events-auto"
                         onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
@@ -569,7 +569,7 @@ export default function StudentDashboard() {
                         onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); }}
                       />
 
-                      {/* 4. Bottom-Right Shield: "Watch on YouTube" Block කිරීම */}
+                      {/* 4. Bottom-Right Shield: "Watch on YouTube" overlay */}
                       <div 
                         className="absolute bottom-0 right-0 w-64 h-16 z-20 bg-transparent cursor-default pointer-events-auto"
                         onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
@@ -591,7 +591,7 @@ export default function StudentDashboard() {
                   ) : (
                     <div className="w-full h-full flex flex-col items-center justify-center text-center p-6 text-slate-500 space-y-2">
                       <PlayCircle className="w-12 h-12 text-slate-700" />
-                      <p className="text-xs">මෙම පන්තියට අදාළ Recordings තවම එක් කර නැත.</p>
+                      <p className="text-xs">No recordings available for this course yet.</p>
                     </div>
                   )}
                 </div>
@@ -600,8 +600,8 @@ export default function StudentDashboard() {
                   <div className="pt-2">
                     <h4 className="text-sm font-bold text-white">{activeRecording.title}</h4>
                     <div className="flex items-center gap-4 text-xs text-slate-400 mt-1">
-                      <span>📅 පැවැත්වූ දිනය: {activeRecording.lesson_date}</span>
-                      <span>⏱️ කාලය: {activeRecording.duration || '2h 00m'}</span>
+                      <span>📅 Date: {activeRecording.lesson_date}</span>
+                      <span>⏱️ Duration: {activeRecording.duration || '2h 00m'}</span>
                     </div>
                   </div>
                 )}
@@ -610,13 +610,13 @@ export default function StudentDashboard() {
               {/* Recordings Playlist */}
               <div className="lg:col-span-4 bg-[#0c1322] border border-slate-800/80 rounded-2xl p-5 shadow-2xl space-y-4">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-                  <h3 className="font-bold text-sm">පාඩම් මාලාව ({recordings.length})</h3>
-                  <span className="text-[10px] text-slate-500">Playlist</span>
+                  <h3 className="font-bold text-sm">Course Playlist ({recordings.length})</h3>
+                  <span className="text-[10px] text-slate-500">Video Lessons</span>
                 </div>
 
                 <div className="space-y-2.5 max-h-[440px] overflow-y-auto pr-1">
                   {recordings.length === 0 ? (
-                    <div className="p-8 text-center text-xs text-slate-500">Recordings නොමැත.</div>
+                    <div className="p-8 text-center text-xs text-slate-500">No recordings found.</div>
                   ) : (
                     recordings.map((rec) => (
                       <button
@@ -653,20 +653,20 @@ export default function StudentDashboard() {
               <div>
                 <h3 className="text-base font-bold text-white flex items-center gap-2">
                   <FileText className="w-5 h-5 text-emerald-400" />
-                  <span>පන්ති නිබන්ධන සහ සටහන් (Tutes & Handouts)</span>
+                  <span>Course Handouts & Study Materials</span>
                 </h3>
-                <p className="text-xs text-slate-400 mt-0.5">ඔබේ පන්තියට අදාළ සියලුම නිබන්ධන මෙතැනින් කියවීමට හෝ Download කර මුද්‍රණය කරගත හැක.</p>
+                <p className="text-xs text-slate-400 mt-0.5">View and download all official class handouts, tutes, and past papers.</p>
               </div>
               <span className="px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold">
-                {materials.length} Materials
+                {materials.length} Handouts
               </span>
             </div>
 
             {materials.length === 0 ? (
               <div className="p-16 rounded-xl bg-slate-900/30 border border-dashed border-slate-800 text-center space-y-2">
                 <FileText className="w-10 h-10 text-slate-600 mx-auto" />
-                <h4 className="text-sm font-semibold text-slate-300">තවමත් නිබන්ධන එක් කර නොමැත</h4>
-                <p className="text-xs text-slate-500">ගුරුතුමා විසින් නිබන්ධන upload කළ සැනින් මෙහි දිස්වනු ඇත.</p>
+                <h4 className="text-sm font-semibold text-slate-300">No study materials uploaded yet</h4>
+                <p className="text-xs text-slate-500">Materials will appear here once published by the teacher.</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -685,7 +685,7 @@ export default function StudentDashboard() {
                     <div className="space-y-3 pt-3 border-t border-slate-800/80">
                       <div className="flex items-center justify-between text-[10px] text-slate-500">
                         <span>📦 {mat.file_size || 'PDF'}</span>
-                        <span>📅 {new Date(mat.created_at).toLocaleDateString('si-LK')}</span>
+                        <span>📅 {new Date(mat.created_at).toLocaleDateString('en-US')}</span>
                       </div>
                       <a
                         href={mat.file_url}
@@ -694,7 +694,7 @@ export default function StudentDashboard() {
                         className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-emerald-600/20"
                       >
                         <Download className="w-4 h-4" />
-                        <span>PDF එක Download කරන්න</span>
+                        <span>Download PDF Handout</span>
                       </a>
                     </div>
                   </div>
@@ -711,9 +711,9 @@ export default function StudentDashboard() {
               <div>
                 <h3 className="text-base font-bold text-white flex items-center gap-2">
                   <Award className="w-5 h-5 text-amber-400" />
-                  <span>පැවරුම් සහ ඇගයීම් (Assignments & Submissions)</span>
+                  <span>Assignments & Evaluations</span>
                 </h3>
-                <p className="text-xs text-slate-400 mt-0.5">පැවරුම් නියමිත Deadline එකට පෙර සිදු කර පිළිතුරු පත්‍ර මෙතැනින් Submit කරන්න.</p>
+                <p className="text-xs text-slate-400 mt-0.5">Submit your homework and answer sheets before the specified deadline.</p>
               </div>
               <span className="px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold">
                 {assignments.length} Tasks
@@ -723,15 +723,15 @@ export default function StudentDashboard() {
             {assignments.length === 0 ? (
               <div className="p-16 rounded-xl bg-slate-900/30 border border-dashed border-slate-800 text-center space-y-2">
                 <Award className="w-10 h-10 text-slate-600 mx-auto" />
-                <h4 className="text-sm font-semibold text-slate-300">තවමත් Assignments ලබාදී නොමැත</h4>
-                <p className="text-xs text-slate-500">නව පැවරුම් ලැබුණු පසු මෙහි දිස්වනු ඇත.</p>
+                <h4 className="text-sm font-semibold text-slate-300">No assignments posted yet</h4>
+                <p className="text-xs text-slate-500">New assignments will be shown here when published.</p>
               </div>
             ) : (
               <div className="space-y-4">
                 {assignments.map((assign) => {
                   const isExpired = new Date(assign.due_date) < new Date();
                   const submission = submissions.find(s => s.assignment_id === assign.id);
-                  const formattedDeadline = new Date(assign.due_date).toLocaleString('si-LK', {
+                  const formattedDeadline = new Date(assign.due_date).toLocaleString('en-US', {
                     year: 'numeric',
                     month: 'short',
                     day: 'numeric',
@@ -763,7 +763,7 @@ export default function StudentDashboard() {
 
                         <div className="flex items-center gap-3">
                           <span className="font-mono text-xs font-bold text-purple-300 bg-purple-500/10 px-3 py-1 rounded-xl border border-purple-500/20">
-                            🎯 Marks: {assign.total_marks}
+                            🎯 Max Marks: {assign.total_marks}
                           </span>
                         </div>
                       </div>
@@ -771,7 +771,7 @@ export default function StudentDashboard() {
                       <div className="flex flex-wrap items-center justify-between gap-3 text-xs bg-[#0c1322] p-3 rounded-xl border border-slate-800/80">
                         <span className="flex items-center gap-1.5 font-semibold text-amber-300">
                           <Clock className="w-4 h-4 text-amber-400" />
-                          <span>අවසන් දිනය (Deadline): {formattedDeadline}</span>
+                          <span>Deadline: {formattedDeadline}</span>
                         </span>
 
                         {assign.file_url && (
@@ -782,7 +782,7 @@ export default function StudentDashboard() {
                             className="text-blue-400 hover:underline flex items-center gap-1 font-semibold"
                           >
                             <Download className="w-3.5 h-3.5" />
-                            <span>ප්‍රශ්න පත්‍රය (Download Paper PDF)</span>
+                            <span>Download Question Paper (PDF)</span>
                           </a>
                         )}
                       </div>
@@ -793,12 +793,12 @@ export default function StudentDashboard() {
                           <div className="p-3 rounded-xl bg-emerald-950/20 border border-emerald-500/30 flex flex-wrap items-center justify-between gap-3">
                             <div className="flex items-center gap-2 text-xs text-emerald-300">
                               <CheckCircle className="w-4 h-4 text-emerald-400" />
-                              <span>ඔබ මෙම පැවරුම {new Date(submission.submitted_at).toLocaleDateString('si-LK')} දින සාර්ථකව භාරදී ඇත.</span>
+                              <span>You submitted this assignment on {new Date(submission.submitted_at).toLocaleDateString('en-US')}.</span>
                             </div>
                             <div className="flex items-center gap-3">
                               {submission.marks !== null && (
                                 <span className="font-mono font-bold text-xs text-emerald-400">
-                                  ලකුණු: {submission.marks} / {assign.total_marks}
+                                  Marks: {submission.marks} / {assign.total_marks}
                                 </span>
                               )}
                               <a
@@ -808,20 +808,20 @@ export default function StudentDashboard() {
                                 className="text-xs text-blue-400 hover:underline flex items-center gap-1"
                               >
                                 <ExternalLink className="w-3.5 h-3.5" />
-                                <span>ඔබේ පිළිතුරු පත්‍රය බලන්න</span>
+                                <span>View Your Answer Sheet</span>
                               </a>
                             </div>
                           </div>
                         ) : isExpired ? (
                           <div className="text-xs text-red-400 flex items-center gap-1.5 p-2 bg-red-500/10 rounded-xl border border-red-500/20">
                             <AlertCircle className="w-4 h-4" />
-                            <span>මෙම Assignment එක භාරදීමේ අවසන් දිනය (Deadline) ඉක්මවා ගොස් ඇත.</span>
+                            <span>The submission deadline for this assignment has passed.</span>
                           </div>
                         ) : (
                           <div>
                             {submittingAssignId === assign.id ? (
                               <div className="p-4 rounded-xl bg-[#0c1322] border border-amber-500/40 space-y-3">
-                                <h5 className="text-xs font-bold text-white">පිළිතුරු පත්‍රය Upload කරන්න (PDF හෝ Photo)</h5>
+                                <h5 className="text-xs font-bold text-white">Upload Answer Sheet (PDF or Image)</h5>
                                 <input
                                   type="file"
                                   required
@@ -836,7 +836,7 @@ export default function StudentDashboard() {
                                     className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs rounded-xl transition cursor-pointer shadow-lg shadow-amber-600/20 disabled:opacity-50 flex items-center gap-1.5"
                                   >
                                     <UploadCloud className="w-4 h-4" />
-                                    <span>{uploadingSubmission ? 'Upload වෙමින් පවතී...' : 'පිළිතුරු පත්‍රය Submit කරන්න'}</span>
+                                    <span>{uploadingSubmission ? 'Uploading...' : 'Submit Answer Sheet'}</span>
                                   </button>
                                   <button
                                     onClick={() => { setSubmittingAssignId(null); setSubmissionFile(null); }}
@@ -852,7 +852,7 @@ export default function StudentDashboard() {
                                 className="px-4 py-2 bg-amber-600/20 hover:bg-amber-600 text-amber-300 hover:text-white border border-amber-500/30 font-bold text-xs rounded-xl transition cursor-pointer flex items-center gap-1.5"
                               >
                                 <UploadCloud className="w-4 h-4" />
-                                <span>📤 පිළිතුරු පත්‍රය භාරදෙන්න (Submit Answer)</span>
+                                <span>📤 Submit Answer Sheet</span>
                               </button>
                             )}
                           </div>
@@ -885,27 +885,27 @@ export default function StudentDashboard() {
                 <CreditCard className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">බැංකු රිසිට්පත යොමු කිරීම</h3>
+                <h3 className="text-base font-bold text-white">Bank Deposit Slip Submission</h3>
                 <p className="text-xs text-slate-400">{activeCourse?.title}</p>
               </div>
             </div>
 
             <div className="p-3.5 rounded-xl bg-[#131c31] border border-slate-800 text-xs space-y-1 text-slate-300">
-              <div className="font-semibold text-amber-300">🏦 පන්ති ගාස්තු තැන්පත් කළ යුතු ගිණුම් අංකය:</div>
+              <div className="font-semibold text-amber-300">🏦 Class Fee Deposit Account Details:</div>
               <p className="font-mono text-white text-[13px]">BOC / Commercial Bank</p>
-              <p className="text-slate-400 text-[11px]">ගිණුම් හිමියාගේ නම: Learn ICT with Mano</p>
+              <p className="text-slate-400 text-[11px]">Account Name: Learn ICT with Mano</p>
             </div>
 
             {slipSuccessMsg ? (
               <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
                 <Check className="w-5 h-5 text-emerald-400 shrink-0" />
-                <span>රිසිට්පත සාර්ථකව යොමු කරන ලදී! ගුරුතුමා අනුමත කළ පසු ඔබේ පන්ති කාලය දීර්ඝ වනු ඇත.</span>
+                <span>Deposit slip submitted successfully! Access will be activated upon teacher review.</span>
               </div>
             ) : (
               <form onSubmit={handleUploadSlip} className="space-y-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1">
-                    ගෙවූ මුදල (Amount - Rs.) *
+                    Amount Paid (Rs.) *
                   </label>
                   <input
                     type="number"
@@ -919,7 +919,7 @@ export default function StudentDashboard() {
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1">
-                    බැංකු රිසිට්පත් ඡායාරූපය හෝ PDF *
+                    Attach Deposit Slip Photo or PDF *
                   </label>
                   <input
                     type="file"
@@ -936,7 +936,7 @@ export default function StudentDashboard() {
                   className="w-full py-3 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-bold rounded-xl text-xs transition shadow-lg shadow-amber-600/20 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <UploadCloud className="w-4 h-4" />
-                  <span>{uploadingSlip ? 'Upload වෙමින් පවතී...' : 'රිසිට්පත තහවුරු කර Submit කරන්න'}</span>
+                  <span>{uploadingSlip ? 'Uploading...' : 'Confirm & Submit Deposit Slip'}</span>
                 </button>
               </form>
             )}
