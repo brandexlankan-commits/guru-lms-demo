@@ -5,12 +5,11 @@ import { supabase } from '@/lib/supabase';
 import { 
   BookOpen, Video, Users, Plus, Trash2, ArrowLeft, 
   Calendar, Clock, Film, PlayCircle,
-  CheckCircle, AlertCircle, X, Shield, RefreshCw, Smartphone,
+  CheckCircle, AlertCircle, X, RefreshCw,
   Search, Unlock, Lock, PhoneCall, CreditCard, Eye, EyeOff, Copy, Check, ExternalLink, Sparkles,
   FileText, UploadCloud, File, Award, Download, KeyRound, CheckCircle2
 } from 'lucide-react';
 
-// Custom YouTube SVG Icon
 const Youtube = ({ className = "w-4 h-4" }: { className?: string }) => (
   <svg className={className} viewBox="0 0 24 24" fill="currentColor">
     <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
@@ -39,7 +38,7 @@ export default function AdminDashboard() {
   // Add Course Modal State
   const [showAddCourseModal, setShowAddCourseModal] = useState(false);
   const [newCourseTitle, setNewCourseTitle] = useState('');
-  const [newCourseCategory, setNewCourseCategory] = useState('Grade 7 ICT');
+  const [newCourseCategory, setNewCourseCategory] = useState('Grade 8 ICT');
   const [newCourseType, setNewCourseType] = useState('Theory');
   const [newCourseFee, setNewCourseFee] = useState('1500');
   const [creatingCourse, setCreatingCourse] = useState(false);
@@ -265,7 +264,7 @@ export default function AdminDashboard() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
-      alert('රිසිට්පත සාර්ථකව අනුමත කරන ලදී!');
+      alert(data.message || 'රිසිට්පත සාර්ථකව අනුමත කරන ලදී!');
       if (previewSlip?.id === slip.id) setPreviewSlip(null);
       fetchSlipsData();
     } catch (err: any) {
@@ -763,26 +762,59 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleExtendAccess = async (student: any) => {
-    setActionLoadingId(`extend_${student.userId}`);
+  // 🗓️ මාසය සක්‍රිය කිරීම (Calendar Month Billing)
+  const handleActivateMonth = async (student: any, targetMonth: 'current_month' | 'next_month') => {
+    const monthLabel = targetMonth === 'next_month' ? 'ඊළඟ මාසය' : 'මෙම මාසය';
+    if (!confirm(`${student.fullName} සඳහා ${monthLabel} පන්ති ගාස්තු සක්‍රිය කිරීමට අවශ්‍යද?`)) return;
+
+    setActionLoadingId(`month_${targetMonth}_${student.userId}`);
     try {
       const res = await fetch('/api/manage-student', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'extend_access',
+          action: 'activate_month',
           userId: student.userId,
-          courseId: selectedFilterCourse,
           enrollmentId: student.enrollmentId,
+          targetMonth,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      alert(`${student.fullName} සඳහා ${monthLabel} සාර්ථකව සක්‍රිය කරන ලදී!`);
+      if (selectedFilterCourse) fetchStudentsForCourse(selectedFilterCourse);
+    } catch (err: any) {
+      alert('දෝෂයකි: ' + err.message);
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  // 🔓/⛔ Access On / Off (Active <-> Suspended) Toggle කිරීම
+  const handleToggleStatus = async (student: any) => {
+    const newStatus = student.status === 'active' ? 'suspended' : 'active';
+    const actionLabel = newStatus === 'active' ? 'නැවත Access ලබාදීමට' : 'Access තාවකාලිකව අත්හිටුවීමට (Deactivate)';
+
+    if (!confirm(`${student.fullName} ගේ ${actionLabel} අවශ්‍ය බව සහතිකද?`)) return;
+
+    setActionLoadingId(`status_${student.userId}`);
+    try {
+      const res = await fetch('/api/manage-student', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'toggle_status',
+          enrollmentId: student.enrollmentId,
+          newStatus,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
       setStudentsList(prev =>
-        prev.map(s => (s.userId === student.userId ? { ...s, validUntil: data.validUntil, status: 'active' } : s))
+        prev.map(s => (s.userId === student.userId ? { ...s, status: newStatus } : s))
       );
-      alert(`${student.fullName} ගේ පන්ති කාලය තවත් දින 30 කට දීර්ඝ කරන ලදී!`);
     } catch (err: any) {
       alert('දෝෂයකි: ' + err.message);
     } finally {
@@ -1000,9 +1032,6 @@ export default function AdminDashboard() {
                     onChange={(e) => setZoomClientSecret(e.target.value)}
                     className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-3 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
                   />
-                  <p className="text-[11px] text-slate-500 mt-1">
-                    💡 Zoom Marketplace හි <strong>Server-to-Server OAuth</strong> App එකෙන් මේ විස්තර ලබාගත හැක.
-                  </p>
                 </div>
 
                 <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
@@ -1022,7 +1051,7 @@ export default function AdminDashboard() {
                     className="w-full sm:flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-lg shadow-blue-600/30 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
                   >
                     <KeyRound className="w-4 h-4" />
-                    <span>{savingZoom ? 'සුරැකෙමින් පවතී...' : '💾 Zoom Credentials සුරකින්න (Save Settings)'}</span>
+                    <span>{savingZoom ? 'සුරැකෙමින් පවතී...' : '💾 Zoom Credentials සුරකින්න'}</span>
                   </button>
                 </div>
               </form>
@@ -1161,21 +1190,6 @@ export default function AdminDashboard() {
                                   <span>🚀 Start Class (Host ලෙස පන්තිය ආරම්භ කරන්න)</span>
                                 </a>
                               </div>
-
-                              <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-xs">
-                                <span className="text-slate-400 flex items-center gap-1 text-[11px]">
-                                  🛡️️ <strong className="text-emerald-400">Anti-Leak Gateway:</strong> ශිෂ්‍ය Link එක ආරක්ෂිතයි
-                                </span>
-                                <a
-                                  href={courseLiveClass.zoom_join_url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="text-purple-400 hover:underline inline-flex items-center gap-1 text-[11px]"
-                                >
-                                  <ExternalLink className="w-3 h-3" />
-                                  <span>Student View එක බලන්න</span>
-                                </a>
-                              </div>
                             </div>
                           ) : (
                             <div className="p-4 rounded-xl bg-slate-900/50 border border-dashed border-slate-800 text-center text-xs text-slate-500">
@@ -1184,15 +1198,6 @@ export default function AdminDashboard() {
                           )}
 
                           <form onSubmit={handleSaveLiveClass} className="space-y-4 pt-2">
-                            <div className="flex items-center justify-between">
-                              <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                                {courseLiveClass ? 'අලුත් Zoom පන්තියක් Schedule කිරීම (Update)' : 'නව Zoom පන්තියක් Schedule කරන්න'}
-                              </h4>
-                              <span className="text-[10px] text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/20 font-semibold flex items-center gap-1">
-                                <Sparkles className="w-3 h-3" /> Auto-Generated
-                              </span>
-                            </div>
-
                             <div>
                               <label className="block text-xs text-slate-400 mb-1">පාඩමේ මාතෘකාව *</label>
                               <input
@@ -1251,11 +1256,6 @@ export default function AdminDashboard() {
                           </div>
 
                           <form onSubmit={handleAddRecording} className="space-y-3 bg-[#131c31] p-4 rounded-xl border border-slate-800">
-                            <div className="flex items-center justify-between">
-                              <h4 className="text-xs font-bold text-slate-200">➕ YouTube Recording එකක් එක් කරන්න</h4>
-                              <span className="text-[10px] text-slate-400">Unlisted Videos Only</span>
-                            </div>
-
                             <div>
                               <label className="block text-[11px] text-slate-400 mb-1">පාඩමේ නම / මාතෘකාව *</label>
                               <input
@@ -1292,7 +1292,7 @@ export default function AdminDashboard() {
                             </div>
 
                             <div>
-                              <label className="block text-[11px] text-slate-400 mb-1">YouTube Unlisted Link එක (හෝ Video ID) *</label>
+                              <label className="block text-[11px] text-slate-400 mb-1">YouTube Unlisted Link එක *</label>
                               <input
                                 type="text"
                                 required
@@ -1309,7 +1309,7 @@ export default function AdminDashboard() {
                               className="w-full bg-red-600 hover:bg-red-500 text-white font-semibold py-2.5 rounded-xl text-xs transition shadow-lg shadow-red-600/20 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5"
                             >
                               <Youtube className="w-3.5 h-3.5" />
-                              <span>{savingRecording ? 'එක්වෙමින් පවතී...' : '+ Recording එක Playlist එකට එක් කරන්න'}</span>
+                              <span>{savingRecording ? 'එක්වෙමින් පවතී...' : '+ Recording එක එක් කරන්න'}</span>
                             </button>
                           </form>
 
@@ -1330,7 +1330,6 @@ export default function AdminDashboard() {
                                     <div className="flex items-center gap-3 text-[10px] text-slate-400 pl-6">
                                       <span>📅 {rec.lesson_date}</span>
                                       <span>⏱️ {rec.duration || '2h 00m'}</span>
-                                      <span className="font-mono text-red-400">YT: {rec.video_id}</span>
                                     </div>
                                   </div>
                                   <button
@@ -1364,7 +1363,7 @@ export default function AdminDashboard() {
                               <input
                                 type="text"
                                 required
-                                placeholder="උදා: Grade 7 ICT - Unit 01 Handout"
+                                placeholder="උදා: Grade 8 ICT - Unit 01 Handout"
                                 value={matTitle}
                                 onChange={(e) => setMatTitle(e.target.value)}
                                 className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500"
@@ -1372,7 +1371,7 @@ export default function AdminDashboard() {
                             </div>
 
                             <div>
-                              <label className="block text-xs text-slate-400 mb-1">කෙටි විස්තරය (Description)</label>
+                              <label className="block text-xs text-slate-400 mb-1">කෙටි විස්තරය</label>
                               <textarea
                                 rows={2}
                                 placeholder="උදා: පාඩමට අදාළ සම්පූර්ණ විස්තරය මෙහි අඩංගු වේ."
@@ -1399,7 +1398,7 @@ export default function AdminDashboard() {
                               className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl text-xs transition shadow-lg shadow-emerald-600/20 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
                             >
                               <UploadCloud className="w-4 h-4" />
-                              <span>{savingMaterial ? 'ගොනුව Upload වෙමින් පවතී...' : '+ මෙම ටියූට් එක පන්තියට එක් කරන්න'}</span>
+                              <span>{savingMaterial ? 'ගොනුව Upload වෙමින් පවතී...' : '+ මෙම ටියූට් එක పන්තියට එක් කරන්න'}</span>
                             </button>
                           </form>
                         </div>
@@ -1427,13 +1426,9 @@ export default function AdminDashboard() {
                                       <FileText className="w-4 h-4 text-emerald-400 shrink-0" />
                                       <h5 className="text-xs font-bold text-white group-hover:text-emerald-300 transition">{mat.title}</h5>
                                     </div>
-                                    {mat.description && (
-                                      <p className="text-[11px] text-slate-400 line-clamp-1 pl-6">{mat.description}</p>
-                                    )}
                                     <div className="flex items-center gap-3 text-[10px] text-slate-500 pl-6">
                                       <span>📄 {mat.file_name}</span>
                                       <span>📦 {mat.file_size}</span>
-                                      <span>📅 {new Date(mat.created_at).toLocaleDateString('si-LK')}</span>
                                     </div>
                                   </div>
 
@@ -1483,17 +1478,6 @@ export default function AdminDashboard() {
                                 value={assignTitle}
                                 onChange={(e) => setAssignTitle(e.target.value)}
                                 className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="block text-xs text-slate-400 mb-1">උපදෙස් (Instructions)</label>
-                              <textarea
-                                rows={2}
-                                placeholder="උදා: A4 කොළ වල ලියා ඡායාරූප PDF එකක් ලෙස Submit කරන්න."
-                                value={assignDesc}
-                                onChange={(e) => setAssignDesc(e.target.value)}
-                                className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-amber-500 resize-none"
                               />
                             </div>
 
@@ -1590,20 +1574,11 @@ export default function AdminDashboard() {
                                         </span>
                                       </div>
 
-                                      {a.description && (
-                                        <p className="text-[11px] text-slate-400 line-clamp-1">{a.description}</p>
-                                      )}
-
                                       <div className="flex flex-wrap items-center gap-4 text-[10px] text-slate-400 pt-1">
                                         <span className="flex items-center gap-1 font-semibold text-amber-300">
                                           <Clock className="w-3 h-3 text-amber-400" /> Deadline: {formattedDeadline}
                                         </span>
                                         <span>🎯 Marks: {a.total_marks}</span>
-                                        {a.file_url && (
-                                          <a href={a.file_url} target="_blank" rel="noreferrer" className="text-blue-400 hover:underline flex items-center gap-1">
-                                            <Download className="w-3 h-3" /> Paper PDF
-                                          </a>
-                                        )}
                                       </div>
                                     </div>
 
@@ -1653,9 +1628,6 @@ export default function AdminDashboard() {
                   <div className="p-16 bg-[#0c1322] border border-slate-800 rounded-2xl text-center space-y-3">
                     <BookOpen className="w-12 h-12 text-slate-600 mx-auto" />
                     <h3 className="text-base font-bold text-white">තවමත් පන්ති කිසිවක් සකස් කර නොමැත</h3>
-                    <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                      ඉහත ඇති "+ අලුත් පන්තියක් සාදන්න" බොත්තම ඔබා ඔබේ පළමු පන්තිය එක් කරන්න.
-                    </p>
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -1754,7 +1726,7 @@ export default function AdminDashboard() {
 
                   <form onSubmit={handleCreateStudent} className="space-y-5">
                     <div>
-                      <label className="block text-xs font-medium text-slate-300 mb-1.5">ශිෂ්‍යයාගේ සම්පූර්ණ නම (Full Name) *</label>
+                      <label className="block text-xs font-medium text-slate-300 mb-1.5">ශිෂ්‍යයාගේ සම්පූර්ණ නම *</label>
                       <input
                         type="text"
                         required
@@ -1767,7 +1739,7 @@ export default function AdminDashboard() {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-xs font-medium text-slate-300 mb-1.5">Username (Login සඳහා) *</label>
+                        <label className="block text-xs font-medium text-slate-300 mb-1.5">Username *</label>
                         <input
                           type="text"
                           required
@@ -1806,7 +1778,7 @@ export default function AdminDashboard() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-medium text-slate-300 mb-2">සම්බන්ධ වන පන්ති තෝරන්න (Select Courses) *</label>
+                      <label className="block text-xs font-medium text-slate-300 mb-2">සම්බන්ධ වන පන්ති තෝරන්න *</label>
                       <div className="space-y-2.5 bg-[#131c31] p-4 rounded-xl border border-slate-800">
                         {courses.map((course) => (
                           <label key={course.id} className="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-slate-800/50 transition">
@@ -1839,7 +1811,6 @@ export default function AdminDashboard() {
                         <span className="text-xl">✅</span>
                         <h3 className="font-bold text-base">ශිෂ්‍යයා සාර්ථකව එක් කරන ලදී!</h3>
                       </div>
-                      <p className="text-xs text-slate-300 mb-3">පහත පණිවිඩය Copy කර හෝ කෙලින්ම WhatsApp හරහා ශිෂ්‍යයාට යවන්න:</p>
                       <div className="bg-[#131c31] p-4 rounded-xl border border-slate-800 text-xs text-slate-200 font-mono whitespace-pre-line leading-relaxed mb-4">
                         {generateWhatsAppMessage()}
                       </div>
@@ -1926,21 +1897,12 @@ export default function AdminDashboard() {
                             <th className="py-3.5 px-4">මුරපදය (Password)</th>
                             <th className="py-3.5 px-4">දුරකථන අංකය</th>
                             <th className="py-3.5 px-4">උපාංගය (Device)</th>
-                            <th className="py-3.5 px-4">වලංගු කාලය (Access)</th>
+                            <th className="py-3.5 px-4">වලංගු කාලය (Access Status)</th>
                             <th className="py-3.5 px-4 text-center">ක්‍රියාමාර්ග (Actions)</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800/60">
                           {filteredStudents.map((st) => {
-                            const isExpired = st.validUntil && new Date(st.validUntil) < new Date();
-                            const formattedDate = st.validUntil
-                              ? new Date(st.validUntil).toLocaleDateString('si-LK', {
-                                  year: 'numeric',
-                                  month: 'short',
-                                  day: 'numeric',
-                                })
-                              : 'සීමාවක් නැත';
-
                             const isPwdVisible = !!showPasswordMap[st.userId];
 
                             return (
@@ -1948,7 +1910,7 @@ export default function AdminDashboard() {
                                 <td className="py-3.5 px-4 font-semibold text-white">{st.fullName}</td>
                                 <td className="py-3.5 px-4 font-mono text-purple-400">@{st.username}</td>
                                 
-                                {/* NEW: Password with Eye Toggle & Copy Button */}
+                                {/* Password with Eye Toggle & Copy */}
                                 <td className="py-3.5 px-4">
                                   <div className="inline-flex items-center gap-2 bg-[#0c1322] px-2.5 py-1 rounded-lg border border-slate-700/60 font-mono text-[11px]">
                                     <span className={isPwdVisible ? 'text-amber-300 font-bold' : 'text-slate-400'}>
@@ -1992,6 +1954,7 @@ export default function AdminDashboard() {
                                     <span className="text-slate-600">-</span>
                                   )}
                                 </td>
+                                
                                 <td className="py-3.5 px-4">
                                   {st.deviceId ? (
                                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-300 font-mono text-[10px]">
@@ -2003,32 +1966,77 @@ export default function AdminDashboard() {
                                     </span>
                                   )}
                                 </td>
+
+                                {/* Valid Until / Status with Days Left */}
                                 <td className="py-3.5 px-4">
-                                  <div className="flex flex-col">
-                                    <span className={`font-semibold ${isExpired ? 'text-red-400' : 'text-emerald-400'}`}>
-                                      {isExpired ? '⛔ Expired' : '✅ Active'}
-                                    </span>
-                                    <span className="text-[10px] text-slate-500">{formattedDate} දක්වා</span>
+                                  <div className="flex flex-col gap-1">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                                        st.status === 'suspended'
+                                          ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                                          : st.isExpired
+                                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                          : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                      }`}>
+                                        {st.status === 'suspended' ? '⛔ Deactivated' : st.isExpired ? '⏳ Expired' : '✅ Active'}
+                                      </span>
+                                    </div>
+
+                                    {st.validUntil && (
+                                      <span className="text-[11px] text-slate-400">
+                                        {st.isExpired 
+                                          ? `⚠️ දින ${Math.abs(st.daysRemaining)} කට පෙර අවසන් විය` 
+                                          : `⏳ තව දින ${st.daysRemaining} ක් ඇත`}
+                                      </span>
+                                    )}
                                   </div>
                                 </td>
+
+                                {/* Flexible Actions: Month Billing & Toggle */}
                                 <td className="py-3.5 px-4">
-                                  <div className="flex items-center justify-center gap-2">
+                                  <div className="flex flex-wrap items-center justify-center gap-2">
+                                    {/* මෙම මාසය සක්‍රිය කිරීම */}
                                     <button
-                                      disabled={actionLoadingId === `extend_${st.userId}`}
-                                      onClick={() => handleExtendAccess(st)}
-                                      className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[11px] transition shadow-md shadow-emerald-600/20 disabled:opacity-50 cursor-pointer"
+                                      disabled={actionLoadingId === `month_current_month_${st.userId}`}
+                                      onClick={() => handleActivateMonth(st, 'current_month')}
+                                      className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[11px] transition shadow cursor-pointer disabled:opacity-50"
+                                      title="මෙම මාසයේ අවසාන දින දක්වා සක්‍රිය කරන්න"
                                     >
-                                      {actionLoadingId === `extend_${st.userId}` ? '...' : '+30 Days ගාස්තු සක්‍රිය'}
+                                      {actionLoadingId === `month_current_month_${st.userId}` ? '...' : '🗓️ මෙම මාසය (+Active)'}
                                     </button>
 
+                                    {/* ඊළඟ මාසය සක්‍රිය කිරීම */}
+                                    <button
+                                      disabled={actionLoadingId === `month_next_month_${st.userId}`}
+                                      onClick={() => handleActivateMonth(st, 'next_month')}
+                                      className="px-2 py-1.5 rounded-lg bg-purple-600/30 hover:bg-purple-600 text-purple-200 hover:text-white border border-purple-500/30 font-semibold text-[11px] transition cursor-pointer disabled:opacity-50"
+                                      title="ඊළඟ මාසය දක්වා සක්‍රිය කරන්න"
+                                    >
+                                      {actionLoadingId === `month_next_month_${st.userId}` ? '...' : '+ ඊළඟ මාසය'}
+                                    </button>
+
+                                    {/* Access On/Off Toggle Button */}
+                                    <button
+                                      disabled={actionLoadingId === `status_${st.userId}`}
+                                      onClick={() => handleToggleStatus(st)}
+                                      className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition border cursor-pointer disabled:opacity-50 ${
+                                        st.status === 'active'
+                                          ? 'bg-red-500/10 hover:bg-red-600 hover:text-white text-red-400 border-red-500/30'
+                                          : 'bg-emerald-500/10 hover:bg-emerald-600 hover:text-white text-emerald-400 border-emerald-500/30'
+                                      }`}
+                                    >
+                                      {actionLoadingId === `status_${st.userId}` ? '...' : st.status === 'active' ? '⛔ අත්හිටුවන්න' : '🔓 On කරන්න'}
+                                    </button>
+
+                                    {/* Device Reset */}
                                     {st.deviceId && (
                                       <button
                                         disabled={actionLoadingId === `reset_${st.userId}`}
                                         onClick={() => handleResetDevice(st)}
-                                        className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-red-500/20 text-slate-300 hover:text-red-400 border border-slate-700 transition text-[11px] cursor-pointer"
+                                        className="px-2 py-1.5 rounded-lg bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-slate-700 text-[11px] cursor-pointer"
                                         title="උපාංගය Reset කරන්න"
                                       >
-                                        {actionLoadingId === `reset_${st.userId}` ? '...' : '🔄 Reset Device'}
+                                        🔄 Reset
                                       </button>
                                     )}
                                   </div>
@@ -2297,7 +2305,6 @@ export default function AdminDashboard() {
               <div className="p-16 bg-[#0c1322] border border-slate-800 rounded-2xl text-center space-y-3">
                 <CreditCard className="w-12 h-12 text-slate-600 mx-auto" />
                 <h3 className="text-base font-bold text-white">මෙම වර්ගයේ රිසිට්පත් කිසිවක් නැත</h3>
-                <p className="text-xs text-slate-400">සිසුන් ගෙවීම් රිසිට්පත් යොමු කළ සැනින් මෙහි දිස්වනු ඇත.</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -2382,7 +2389,7 @@ export default function AdminDashboard() {
                               className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-lg shadow-emerald-600/20"
                             >
                               <Check className="w-3.5 h-3.5" />
-                              <span>{processingSlipId === slip.id ? 'Approve වෙමින්...' : 'Approve (+30 Days)'}</span>
+                              <span>{processingSlipId === slip.id ? 'Approve වෙමින්...' : 'Approve (මාසය සක්‍රිය)'}</span>
                             </button>
                             <button
                               disabled={processingSlipId === slip.id}
@@ -2468,7 +2475,7 @@ export default function AdminDashboard() {
                     onClick={() => handleApproveSlip(previewSlip)}
                     className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition shadow-lg shadow-emerald-600/20 cursor-pointer"
                   >
-                    {processingSlipId === previewSlip.id ? 'Approve වෙමින්...' : '✅ Approve (+30 Days Access)'}
+                    {processingSlipId === previewSlip.id ? 'Approve වෙමින්...' : '✅ Approve (මාසය සක්‍රිය)'}
                   </button>
                 </div>
               )}
@@ -2493,7 +2500,6 @@ export default function AdminDashboard() {
                 <BookOpen className="w-5 h-5 text-purple-400" />
                 නව පන්තියක් සකස් කිරීම
               </h3>
-              <p className="text-xs text-slate-400">නව ICT පන්තියේ විස්තර ඇතුළත් කර පද්ධතියට එක් කරන්න.</p>
             </div>
 
             <form onSubmit={handleCreateCourse} className="space-y-4">
@@ -2515,7 +2521,7 @@ export default function AdminDashboard() {
                   <input
                     type="text"
                     required
-                    placeholder="Grade 8 ICT / O/L ICT"
+                    placeholder="Grade 8 ICT"
                     value={newCourseCategory}
                     onChange={(e) => setNewCourseCategory(e.target.value)}
                     className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-purple-500"
@@ -2532,13 +2538,12 @@ export default function AdminDashboard() {
                     <option value="Practical">Practical</option>
                     <option value="Revision">Revision</option>
                     <option value="Paper">Paper Class</option>
-                    <option value="Special">Special Seminar</option>
                   </select>
                 </div>
               </div>
 
               <div>
-                <label className="text-xs text-slate-300 block mb-1.5">මාසික පන්ති ගාස්තුව (Monthly Fee - Rs.) *</label>
+                <label className="text-xs text-slate-300 block mb-1.5">මාසික පන්ති ගාස්තුව (Rs.) *</label>
                 <input
                   type="number"
                   required
@@ -2554,7 +2559,7 @@ export default function AdminDashboard() {
                 disabled={creatingCourse}
                 className="w-full py-3 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition cursor-pointer shadow-lg shadow-purple-600/30"
               >
-                {creatingCourse ? 'එක්වෙමින් පවතී...' : '+ මෙම පන්තිය සුරකින්න (Save Course)'}
+                {creatingCourse ? 'එක්වෙමින් පවතී...' : '+ මෙම පන්තිය සුරකින්න'}
               </button>
             </form>
           </div>

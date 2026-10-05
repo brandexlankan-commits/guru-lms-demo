@@ -39,7 +39,7 @@ export async function GET() {
       userMap.set(u.id, u);
     });
 
-    // 4. Map slips with student name, username, phone and course name
+    // 4. Map slips
     const slips = (slipsData || []).map((s: any) => {
       const u = userMap.get(s.student_id);
       return {
@@ -77,7 +77,7 @@ export async function GET() {
   }
 }
 
-// POST: Approve or Reject Slips
+// POST: Approve or Reject Slips (Calendar Month Billing)
 export async function POST(req: Request) {
   try {
     const supabaseAdmin = getAdminClient();
@@ -97,11 +97,12 @@ export async function POST(req: Request) {
 
       if (slipErr) throw slipErr;
 
-      // 2. Extend student course access for 30 days
-      const newValidUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      // 2. Calculate End of Current Month
+      const now = new Date();
+      const endOfCurrentMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      const newValidUntil = endOfCurrentMonth.toISOString();
 
       if (studentId && courseId) {
-        // Check existing enrollment
         const { data: existingEnroll } = await supabaseAdmin
           .from('course_enrollments')
           .select('id')
@@ -128,7 +129,7 @@ export async function POST(req: Request) {
         }
       }
 
-      return NextResponse.json({ success: true, message: 'රිසිට්පත සාර්ථකව අනුමත කරන ලදී!' });
+      return NextResponse.json({ success: true, message: 'රිසිට්පත අනුමත කර මෙම මාසය සඳහා පන්තිය සක්‍රිය කරන ලදී!' });
     }
 
     if (action === 'reject') {

@@ -9,7 +9,7 @@ function getAdminClient() {
   );
 }
 
-// GET: Fetch students enrolled in a specific course
+// GET: Fetch students enrolled in a specific course with monthly details & remaining days
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -38,8 +38,21 @@ export async function GET(req: Request) {
       usersMap.set(u.id, u);
     });
 
+    const now = new Date();
+
     const students = (enrollments || []).map((e: any) => {
       const u = usersMap.get(e.user_id);
+      const validUntilDate = e.valid_until ? new Date(e.valid_until) : null;
+      
+      let daysRemaining: number | null = null;
+      let isExpired = false;
+
+      if (validUntilDate) {
+        const diffTime = validUntilDate.getTime() - now.getTime();
+        daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        isExpired = daysRemaining <= 0;
+      }
+
       return {
         enrollmentId: e.id,
         userId: e.user_id,
@@ -49,7 +62,9 @@ export async function GET(req: Request) {
         password: u?.user_metadata?.initial_password || u?.user_metadata?.password || 'Mano#2026',
         deviceId: u?.user_metadata?.device_id || null,
         validUntil: e.valid_until,
-        status: e.status,
+        status: e.status || 'active',
+        daysRemaining,
+        isExpired,
       };
     });
 
@@ -60,24 +75,47 @@ export async function GET(req: Request) {
   }
 }
 
-// POST: Actions like Extend Access & Reset Device
+// POST: Flexible Access Controls (Activate Month, Toggle Status, Reset Device)
 export async function POST(req: Request) {
   try {
     const supabaseAdmin = getAdminClient();
     const body = await req.json();
-    const { action, userId, enrollmentId } = body;
+    const { action, userId, enrollmentId, targetMonth, newStatus } = body;
 
-    if (action === 'extend_access') {
-      const newValidUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    // 1. Activate for a calendar month
+    if (action === 'activate_month') {
+      const now = new Date();
+      let targetDate: Date;
+
+      if (targetMonth === 'next_month') {
+        targetDate = new Date(now.getFullYear(), now.getMonth() + 2, 0, 23, 59, 59, 999);
+      } else {
+        targetDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      }
+
+      const newValidUntil = targetDate.toISOString();
+
       const { error } = await supabaseAdmin
         .from('course_enrollments')
         .update({ valid_until: newValidUntil, status: 'active' })
         .eq('id', enrollmentId);
 
       if (error) throw error;
-      return NextResponse.json({ success: true, validUntil: newValidUntil });
+      return NextResponse.json({ success: true, validUntil: newValidUntil, status: 'active' });
     }
 
+    // 2. Manual Toggle Access (Active <-> Suspended)
+    if (action === 'toggle_status') {
+      const { error } = await supabaseAdmin
+        .from('course_enrollments')
+        .update({ status: newStatus })
+        .eq('id', enrollmentId);
+
+      if (error) throw error;
+      return NextResponse.json({ success: true, status: newStatus });
+    }
+
+    // 3. Reset Single Device
     if (action === 'reset_device') {
       const { data: userData, error: userErr } = await supabaseAdmin.auth.admin.getUserById(userId);
       if (userErr || !userData.user) throw new Error('ශිෂ්‍යයා හමු නොවීය.');

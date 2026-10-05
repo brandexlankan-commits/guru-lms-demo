@@ -51,7 +51,6 @@ export default function StudentDashboard() {
   useEffect(() => {
     fetchStudentData();
 
-    // Watermark එක සෙමින් ස්ථාන මාරු වීම
     const interval = setInterval(() => {
       const randomTop = Math.floor(15 + Math.random() * 65) + '%';
       const randomLeft = Math.floor(10 + Math.random() * 60) + '%';
@@ -81,19 +80,19 @@ export default function StudentDashboard() {
       const { data: enrollments } = await supabase
         .from('course_enrollments')
         .select('*, courses(*)')
-        .eq('user_id', user.id)
-        .eq('status', 'active');
+        .eq('user_id', user.id);
 
       if (enrollments && enrollments.length > 0) {
         const enrolledCourses = enrollments.map((e: any) => ({
           ...e.courses,
           enrollmentId: e.id,
           validUntil: e.valid_until,
+          status: e.status || 'active',
         }));
         setCourses(enrolledCourses);
         const defaultCourse = enrolledCourses[0];
         setActiveCourse(defaultCourse);
-        setSlipAmount(defaultCourse.monthly_fee ? defaultCourse.monthly_fee.toString() : '2000');
+        setSlipAmount(defaultCourse.monthly_fee ? defaultCourse.monthly_fee.toString() : '1500');
         loadCourseContent(defaultCourse.id, user.id);
       }
     } catch (e) {
@@ -180,7 +179,7 @@ export default function StudentDashboard() {
 
   const handleSelectCourse = (course: any) => {
     setActiveCourse(course);
-    setSlipAmount(course.monthly_fee ? course.monthly_fee.toString() : '2000');
+    setSlipAmount(course.monthly_fee ? course.monthly_fee.toString() : '1500');
     loadCourseContent(course.id);
   };
 
@@ -259,7 +258,6 @@ export default function StudentDashboard() {
     setSlipSuccessMsg(false);
 
     try {
-      // 1. Upload Slip to Supabase Storage
       const cleanFileName = slipFile.name.replace(/[^a-zA-Z0-9.-]/g, '_');
       const storagePath = `slips/${currentUser.id}_${activeCourse.id}_${Date.now()}_${cleanFileName}`;
 
@@ -273,7 +271,6 @@ export default function StudentDashboard() {
         .from('lms-materials')
         .getPublicUrl(storagePath);
 
-      // 2. Submit Slip through Backend Gateway
       const res = await fetch('/api/student/upload-slip', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -302,6 +299,8 @@ export default function StudentDashboard() {
   };
 
   const username = currentUser?.user_metadata?.username || currentUser?.email?.split('@')[0] || 'student';
+  const isCourseSuspended = activeCourse?.status === 'suspended';
+  const isCourseExpired = activeCourse?.validUntil && new Date(activeCourse.validUntil) < new Date();
 
   return (
     <div className="min-h-screen bg-[#070b14] text-white p-4 md:p-8 font-sans select-none">
@@ -324,7 +323,6 @@ export default function StudentDashboard() {
             </div>
           </div>
 
-          {/* Mobile Logout Button */}
           <button
             onClick={handleLogout}
             className="sm:hidden p-2 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500 hover:text-white transition cursor-pointer flex items-center gap-1 text-xs"
@@ -334,7 +332,6 @@ export default function StudentDashboard() {
           </button>
         </div>
 
-        {/* Course Navigation and Desktop Logout Button */}
         <div className="flex flex-wrap items-center justify-between sm:justify-end gap-2.5 w-full sm:w-auto">
           <div className="flex flex-wrap gap-2">
             {courses.map((c) => (
@@ -365,7 +362,34 @@ export default function StudentDashboard() {
       {/* Main Content Area */}
       <main className="max-w-7xl mx-auto mt-6 space-y-6">
         
-        {/* Course Info Banner with Bank Slip Upload Trigger */}
+        {/* ⚠️ Access Suspended or Expired Warning Banner */}
+        {activeCourse && (isCourseSuspended || isCourseExpired) && (
+          <div className="bg-red-950/40 border border-red-500/40 p-5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-2xl">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 rounded-xl bg-red-500/20 border border-red-500/30 flex items-center justify-center text-red-400 text-2xl shrink-0">
+                ⚠️
+              </div>
+              <div>
+                <h3 className="text-sm sm:text-base font-bold text-red-300">
+                  {isCourseSuspended ? 'මෙම පන්තිය සඳහා ඔබගේ ප්‍රවේශය තාවකාලිකව අත්හිටුවා ඇත' : 'පන්ති ගාස්තු වලංගු කාලය අවසන් වී ඇත'}
+                </h3>
+                <p className="text-xs text-slate-300 mt-0.5">
+                  කරුණාකර මෙම මාසයේ පන්ති ගාස්තු ගෙවා ඔබගේ බැංකු රිසිට්පත මෙතැනින් Upload කරන්න.
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowSlipModal(true)}
+              className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-lg transition flex items-center justify-center gap-2 cursor-pointer shrink-0"
+            >
+              <CreditCard className="w-4 h-4" />
+              <span>💳 රිසිට්පත Upload කරන්න</span>
+            </button>
+          </div>
+        )}
+
+        {/* Course Info Banner */}
         {activeCourse && (
           <div className="bg-[#0c1322] border border-slate-800 p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4 shadow-xl">
             <div>
@@ -376,21 +400,24 @@ export default function StudentDashboard() {
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                වලංගු කාලය: <strong className="text-emerald-400">
-                  {activeCourse.validUntil ? new Date(activeCourse.validUntil).toLocaleDateString('si-LK') : 'Active'} දක්වා
+                වලංගු කාලය: <strong className={isCourseSuspended || isCourseExpired ? 'text-red-400' : 'text-emerald-400'}>
+                  {isCourseSuspended ? 'අත්හිටුවා ඇත (Suspended)' : activeCourse.validUntil ? `${new Date(activeCourse.validUntil).toLocaleDateString('si-LK')} දක්වා` : 'Active'}
                 </strong>
               </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
-              <span className="px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold flex items-center gap-1.5">
-                <CheckCircle className="w-3.5 h-3.5" /> Access Active
+              <span className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 ${
+                isCourseSuspended || isCourseExpired
+                  ? 'bg-red-500/10 border-red-500/30 text-red-400'
+                  : 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400'
+              }`}>
+                <CheckCircle className="w-3.5 h-3.5" /> {isCourseSuspended ? 'Access Suspended' : isCourseExpired ? 'Expired' : 'Access Active'}
               </span>
 
-              {/* 💳 Bank Slip Upload Button */}
               <button
                 onClick={() => setShowSlipModal(true)}
-                className="px-4 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/40 font-bold text-xs transition flex items-center gap-1.5 cursor-pointer shadow-md shadow-amber-500/10"
+                className="px-4 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/40 font-bold text-xs transition flex items-center gap-1.5 cursor-pointer shadow-md"
               >
                 <CreditCard className="w-4 h-4" />
                 <span>💳 රිසිට්පත් Upload (Bank Slip)</span>
@@ -533,7 +560,7 @@ export default function StudentDashboard() {
                         onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); }}
                       />
 
-                      {/* 3. Bottom-Left Shield: Copy Link Icon (🔗) Block කිරීම (Mobile සහ PC/Desktop දෙකටම ක්‍රියාත්මකයි) */}
+                      {/* 3. Bottom-Left Shield: Copy Link Icon (🔗) Block කිරීම */}
                       <div 
                         className="absolute bottom-0 left-0 w-36 h-24 z-20 bg-transparent cursor-default pointer-events-auto"
                         onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
@@ -551,7 +578,7 @@ export default function StudentDashboard() {
                         onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); }}
                       />
 
-                      {/* 5. Ultra-Translucent Faint Watermark (අකුරු නොවැසෙන සියුම් Watermark එක) */}
+                      {/* 5. Ultra-Translucent Faint Watermark */}
                       <div 
                         className="absolute z-30 pointer-events-none transition-all duration-1000 ease-in-out select-none"
                         style={{ top: watermarkPos.top, left: watermarkPos.left }}
@@ -863,7 +890,6 @@ export default function StudentDashboard() {
               </div>
             </div>
 
-            {/* Bank Details Note */}
             <div className="p-3.5 rounded-xl bg-[#131c31] border border-slate-800 text-xs space-y-1 text-slate-300">
               <div className="font-semibold text-amber-300">🏦 පන්ති ගාස්තු තැන්පත් කළ යුතු ගිණුම් අංකය:</div>
               <p className="font-mono text-white text-[13px]">BOC / Commercial Bank</p>
@@ -884,7 +910,7 @@ export default function StudentDashboard() {
                   <input
                     type="number"
                     required
-                    placeholder="2000"
+                    placeholder="1500"
                     value={slipAmount}
                     onChange={(e) => setSlipAmount(e.target.value)}
                     className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-emerald-400 font-mono focus:outline-none focus:border-amber-500"
