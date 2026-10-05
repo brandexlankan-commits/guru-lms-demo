@@ -1,17 +1,19 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { 
   Video, PlayCircle, Lock, ShieldAlert, Film, Clock, 
   Calendar, CheckCircle, Smartphone, ExternalLink, Sparkles,
   FileText, Download, Award, UploadCloud, Check, AlertCircle, File,
-  LogOut
+  LogOut, Maximize, Minimize
 } from 'lucide-react';
 
 export default function StudentDashboard() {
   const router = useRouter();
+  const playerContainerRef = useRef<HTMLDivElement>(null);
+
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [courses, setCourses] = useState<any[]>([]);
   const [activeCourse, setActiveCourse] = useState<any | null>(null);
@@ -27,6 +29,9 @@ export default function StudentDashboard() {
   const [assignments, setAssignments] = useState<any[]>([]);
   const [submissions, setSubmissions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Fullscreen state
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Student Assignment Submission State
   const [submittingAssignId, setSubmittingAssignId] = useState<string | null>(null);
@@ -46,7 +51,15 @@ export default function StudentDashboard() {
       setWatermarkPos({ top: randomTop, left: randomLeft });
     }, 10000);
 
-    return () => clearInterval(interval);
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
   }, []);
 
   const fetchStudentData = async () => {
@@ -111,7 +124,7 @@ export default function StudentDashboard() {
         setActiveRecording(null);
       }
 
-      // 3. Fetch Tutes / Materials (course_materials සහ materials යන දෙකෙන්ම fetch කිරීම)
+      // 3. Fetch Tutes / Materials
       let matsData: any[] = [];
       const { data: mats } = await supabase
         .from('course_materials')
@@ -143,7 +156,7 @@ export default function StudentDashboard() {
 
       setAssignments(assigns || []);
 
-      // 5. Fetch this student's submissions
+      // 5. Fetch student submissions
       if (targetUserId) {
         const { data: userSubs } = await supabase
           .from('assignment_submissions')
@@ -166,6 +179,15 @@ export default function StudentDashboard() {
     if (confirm('ඔබට පද්ධතියෙන් නික්මීමට (Log out) අවශ්‍ය බව සහතිකද?')) {
       await supabase.auth.signOut();
       router.push('/login');
+    }
+  };
+
+  const toggleFullScreen = () => {
+    if (!playerContainerRef.current) return;
+    if (!document.fullscreenElement) {
+      playerContainerRef.current.requestFullscreen().catch((err) => console.error(err));
+    } else {
+      document.exitFullscreen().catch((err) => console.error(err));
     }
   };
 
@@ -240,7 +262,7 @@ export default function StudentDashboard() {
             </div>
           </div>
 
-          {/* Mobile Logout Button (Visible only on phone) */}
+          {/* Mobile Logout Button */}
           <button
             onClick={handleLogout}
             className="sm:hidden p-2 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500 hover:text-white transition cursor-pointer flex items-center gap-1 text-xs"
@@ -388,49 +410,64 @@ export default function StudentDashboard() {
                   <div className="flex items-center gap-2">
                     <Film className="w-5 h-5 text-red-500" />
                     <h3 className="font-bold text-sm">ආරක්ෂිත Class Recordings</h3>
+                    <span className="text-[10px] bg-red-500/10 border border-red-500/20 text-red-400 px-2.5 py-0.5 rounded-full font-bold ml-2">
+                      YouTube Package Data
+                    </span>
                   </div>
-                  <span className="text-[10px] bg-red-500/10 border border-red-500/20 text-red-400 px-2.5 py-0.5 rounded-full font-bold">
-                    YouTube Package Data
-                  </span>
+
+                  {/* Secure Fullscreen Toggle Button */}
+                  {activeRecording && (
+                    <button
+                      onClick={toggleFullScreen}
+                      className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer border border-slate-700/60"
+                      title="සම්පූර්ණ තිරය (Fullscreen)"
+                    >
+                      {isFullscreen ? <Minimize className="w-3.5 h-3.5" /> : <Maximize className="w-3.5 h-3.5" />}
+                      <span className="text-[11px]">{isFullscreen ? 'Exit Fullscreen' : '⛶ Fullscreen'}</span>
+                    </button>
+                  )}
                 </div>
 
                 <div 
-                  className="relative aspect-video w-full rounded-2xl bg-black border border-slate-800 overflow-hidden shadow-2xl"
+                  ref={playerContainerRef}
+                  className="relative aspect-video w-full rounded-2xl bg-black border border-slate-800 overflow-hidden shadow-2xl flex items-center justify-center"
                   onContextMenu={(e) => e.preventDefault()}
                 >
                   {activeRecording ? (
                     <>
                       <iframe
-                        src={`https://www.youtube-nocookie.com/embed/${activeRecording.video_id}?rel=0&modestbranding=1&controls=1&showinfo=0&disablekb=0&fs=1`}
+                        src={`https://www.youtube-nocookie.com/embed/${activeRecording.video_id}?rel=0&modestbranding=1&controls=1&showinfo=0&disablekb=0&fs=0`}
                         title={activeRecording.title}
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                        allowFullScreen
                         className="w-full h-full border-0"
                       />
 
-                      {/* 🛡️ ANTI-CLICK SHIELDS */}
-                      {/* 1. Header Shield */}
+                      {/* 🛡️ ULTRA-WIDE ANTI-CLICK SHIELDS */}
+                      {/* 1. Top Shield: Title, Channel Avatar, Share Button සම්පූර්ණයෙන්ම Block කිරීම */}
                       <div 
-                        className="absolute top-0 left-0 right-0 h-14 z-20 bg-transparent cursor-default" 
+                        className="absolute top-0 left-0 right-0 h-20 z-20 bg-transparent cursor-default pointer-events-auto" 
                         onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                        onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
                         onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); }}
                       />
 
-                      {/* 2. Bottom-Left Shield (Copy Link Icon Block) */}
+                      {/* 2. Bottom-Left Shield: Mobile Copy Link අයිකනය (🔗) Block කිරීම */}
                       <div 
-                        className="absolute bottom-0 left-0 w-28 h-14 z-20 bg-transparent cursor-default"
+                        className="absolute bottom-0 left-0 w-36 h-16 z-20 bg-transparent cursor-default pointer-events-auto"
                         onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                        onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
                         onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); }}
                       />
 
-                      {/* 3. Bottom-Right Shield (YouTube Button Block) */}
+                      {/* 3. Bottom-Right Shield: "Watch on YouTube" badge එක සහ YouTube Icon එක සම්පූර්ණයෙන්ම ආවරණය වන පරිදි (W-72 / 288px පළල) */}
                       <div 
-                        className="absolute bottom-0 right-0 w-32 h-14 z-20 bg-transparent cursor-default"
+                        className="absolute bottom-0 right-0 w-72 h-16 z-20 bg-transparent cursor-default pointer-events-auto"
                         onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                        onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
                         onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); }}
                       />
 
-                      {/* 💧 FAINT & ULTRA-TRANSLUCENT WATERMARK */}
+                      {/* 💧 FAINT & ULTRA-TRANSLUCENT WATERMARK (කළු කොටු නොමැතිව අකුරු නොවැසෙන පරිදි) */}
                       <div 
                         className="absolute z-30 pointer-events-none transition-all duration-1000 ease-in-out select-none"
                         style={{ top: watermarkPos.top, left: watermarkPos.left }}
