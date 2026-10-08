@@ -137,7 +137,6 @@ export default function AdminDashboard() {
         const { data: { user } } = await supabase.auth.getUser();
 
         if (!user) {
-          // If not logged in, bounce immediately to login
           router.replace('/login');
           return;
         }
@@ -157,7 +156,6 @@ export default function AdminDashboard() {
           (userEmail.includes('teacher') && !userEmail.includes('@student.'));
 
         if (!isAdmin) {
-          // A student or unauthorized user attempted to access /admin/dashboard directly!
           alert('Access Denied: You do not have administrative privileges.');
           router.replace('/student/dashboard');
           return;
@@ -165,7 +163,8 @@ export default function AdminDashboard() {
 
         setIsAuthorizedAdmin(true);
         fetchCourses();
-        generateRandomPassword();
+        fetchDevicesData();
+        generateRandomPassword('');
       } catch (err) {
         console.error(err);
         router.replace('/login');
@@ -845,18 +844,40 @@ export default function AdminDashboard() {
     }
   };
 
-  const generateRandomPassword = () => {
+  // 🔑 Personalized Non-Repeating Password Generator (StudentName + # + 4 Unique Digits)
+  const generateRandomPassword = (nameOverride?: string) => {
+    const targetName = nameOverride !== undefined ? nameOverride : fullName;
+    const firstName = targetName.trim().split(/\s+/)[0] || '';
+    const cleanFirstName = firstName.replace(/[^a-zA-Z0-9]/g, '');
+    const capitalizedFirstName = cleanFirstName 
+      ? cleanFirstName.charAt(0).toUpperCase() + cleanFirstName.slice(1).toLowerCase() 
+      : 'Student';
     const randomDigits = Math.floor(1000 + Math.random() * 9000);
-    setPassword(`Mano#${randomDigits}`);
+    setPassword(`${capitalizedFirstName}#${randomDigits}`);
   };
 
+  // 👤 Smart Auto-Generation for Standard Username (st_name01) & Unique Password (Name#1234)
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setFullName(val);
-    if (!username || username === '') {
-      const clean = val.toLowerCase().replace(/[^a-z0-9]/g, '');
-      const randomSuffix = Math.floor(100 + Math.random() * 900);
-      setUsername(clean ? `${clean}${randomSuffix}` : '');
+
+    const firstName = val.trim().split(/\s+/)[0] || '';
+    const cleanFirstName = firstName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const capitalizedFirstName = cleanFirstName 
+      ? cleanFirstName.charAt(0).toUpperCase() + cleanFirstName.slice(1).toLowerCase() 
+      : 'Student';
+
+    if (cleanFirstName) {
+      // 1. Standard Username: st_ + student name + sequential 2-digit index (e.g. st_kasun01)
+      const nextIndex = String((devicesList.length || studentsList.length || 0) + 1).padStart(2, '0');
+      setUsername(`st_${cleanFirstName}${nextIndex}`);
+
+      // 2. Personalized Strong Password: StudentName + # + 4 random digits (e.g. Kasun#4829)
+      const randomDigits = Math.floor(1000 + Math.random() * 9000);
+      setPassword(`${capitalizedFirstName}#${randomDigits}`);
+    } else {
+      setUsername('');
+      generateRandomPassword('');
     }
   };
 
@@ -907,7 +928,8 @@ export default function AdminDashboard() {
       setUsername('');
       setPhone('');
       setSelectedCourses([]);
-      generateRandomPassword();
+      fetchDevicesData();
+      generateRandomPassword('');
     } catch (err: any) {
       setFormError(err.message);
     } finally {
@@ -1076,7 +1098,6 @@ Your account will automatically bind to the first device you log in with. Please
     return matchesFilter && matchesSearch;
   });
 
-  // 🛡️ Loading Screen while checking security permissions
   if (authChecking) {
     return (
       <div className="min-h-screen bg-[#070b14] flex flex-col items-center justify-center text-white space-y-4 font-sans">
@@ -1947,17 +1968,47 @@ Your account will automatically bind to the first device you log in with. Please
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Standard Username Field with Format Presets */}
                       <div>
-                        <label className="block text-xs font-medium text-slate-300 mb-1.5">Username *</label>
+                        <div className="flex justify-between items-center mb-1.5">
+                          <label className="text-xs font-medium text-slate-300">Username (Standard ID) *</label>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const nextIndex = String((devicesList.length || studentsList.length || 0) + 1).padStart(2, '0');
+                                setUsername(`st${nextIndex}`);
+                              }}
+                              className="text-[10px] bg-slate-800 hover:bg-slate-700 text-purple-300 px-2 py-0.5 rounded cursor-pointer transition font-mono"
+                              title="Set pure student ID format"
+                            >
+                              st01
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const firstName = fullName.trim().split(/\s+/)[0] || '';
+                                const clean = firstName.toLowerCase().replace(/[^a-z0-9]/g, '');
+                                const nextIndex = String((devicesList.length || studentsList.length || 0) + 1).padStart(2, '0');
+                                setUsername(clean ? `st_${clean}${nextIndex}` : `st${nextIndex}`);
+                              }}
+                              className="text-[10px] bg-slate-800 hover:bg-slate-700 text-purple-300 px-2 py-0.5 rounded cursor-pointer transition font-mono"
+                              title="Set student name ID format"
+                            >
+                              st_name01
+                            </button>
+                          </div>
+                        </div>
                         <input
                           type="text"
                           required
-                          placeholder="kasun482"
+                          placeholder="e.g. st_kasun01"
                           value={username}
                           onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/\s+/g, ''))}
                           className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-3 text-sm text-purple-300 font-mono focus:outline-none focus:border-purple-500 transition"
                         />
                       </div>
+
                       <div>
                         <label className="block text-xs font-medium text-slate-300 mb-1.5">WhatsApp Mobile Number</label>
                         <input
@@ -1970,11 +2021,16 @@ Your account will automatically bind to the first device you log in with. Please
                       </div>
                     </div>
 
+                    {/* Personalized Strong Password Field */}
                     <div>
                       <div className="flex justify-between items-center mb-1.5">
-                        <label className="text-xs font-medium text-slate-300">Temporary Password *</label>
-                        <button type="button" onClick={generateRandomPassword} className="text-xs text-purple-400 hover:underline cursor-pointer">
-                          🔄 Generate New Password
+                        <label className="text-xs font-medium text-slate-300">Personalized Password *</label>
+                        <button 
+                          type="button" 
+                          onClick={() => generateRandomPassword()} 
+                          className="text-xs text-purple-400 hover:underline cursor-pointer flex items-center gap-1"
+                        >
+                          🔄 Generate New Code
                         </button>
                       </div>
                       <input
@@ -1982,8 +2038,11 @@ Your account will automatically bind to the first device you log in with. Please
                         required
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-3 text-sm text-white font-mono focus:outline-none focus:border-purple-500 transition"
+                        className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-3 text-sm text-emerald-300 font-mono focus:outline-none focus:border-purple-500 transition"
                       />
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        💡 Auto-formatted: Student Name + # + 4 Unique digits (e.g. <span className="text-emerald-400 font-mono">Kasun#4829</span>). Unique and never repeats!
+                      </p>
                     </div>
 
                     <div>
