@@ -84,9 +84,9 @@ export default function Home() {
               </span>
             </h1>
 
-            {/* Sub-description */}
+            {/* Sub-description (BA එකතු කර යාවත්කාලීන කරන ලදී) */}
             <p className="text-slate-300 text-sm sm:text-base max-w-2xl mx-auto leading-relaxed">
-              O/L, A/L ICT විශය නිර්දේශයේ සිට බාහිර උපාධි (BIT, BCS) සහ විශ්වවිද්‍යාල පරිගණක විද්‍යා මොඩියුලයන් දක්වා සියල්ල ප්‍රායෝගිකව සහ සරලව හදාරන්න.
+              O/L, A/L ICT විශය නිර්දේශයේ සිට බාහිර උපාධි (BIT, BCS, BA) සහ විශ්වවිද්‍යාල පරිගණක විද්‍යා මොඩියුලයන් දක්වා සියල්ල ප්‍රායෝගිකව සහ සරලව හදාරන්න.
             </p>
 
             {/* Dual CTA Buttons */}
@@ -162,22 +162,22 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Card 2: බාහිර උපාධි (External Degrees) */}
+              {/* Card 2: බාහිර උපාධි (External Degrees - BIT / BCS / BA) */}
               <div className="bg-[#0c1322] border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4 flex flex-col justify-between hover:border-emerald-500/40 transition group">
                 <div className="space-y-4">
                   <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-lg">
                     <Building2 className="w-6 h-6" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold text-white group-hover:text-emerald-300 transition">බාහිර උපාධි (BIT / BCS)</h3>
+                    <h3 className="text-lg font-bold text-white group-hover:text-emerald-300 transition">බාහිර උපාධි (BIT / BCS / BA)</h3>
                     <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                      UCSC BIT, University of Moratuwa BIT, BCS (HEQ) සහ විවෘත විශ්වවිද්‍යාල (OUSL) බාහිර උපාධි හදාරන සිසුන් සඳහා විශේෂිත මඟපෙන්වීම.
+                      UCSC BIT, University of Moratuwa BIT, BCS (HEQ), BA සහ විවෘත විශ්වවිද්‍යාල (OUSL) බාහිර උපාධි හදාරන සිසුන් සඳහා විශේෂිත මඟපෙන්වීම.
                     </p>
                   </div>
                 </div>
                 <div className="pt-4 border-t border-slate-800/80 space-y-2">
                   <a 
-                    href={getCourseWhatsAppUrl("බාහිර උපාධි (BIT/BCS)")}
+                    href={getCourseWhatsAppUrl("බාහිර උපාධි (BIT/BCS/BA)")}
                     target="_blank"
                     rel="noreferrer"
                     className="w-full py-2 px-3 rounded-xl bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition"
