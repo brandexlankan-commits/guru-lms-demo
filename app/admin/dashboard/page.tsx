@@ -148,11 +148,11 @@ export default function AdminDashboard() {
         const isAdmin = 
           userRole === 'admin' || 
           userRole === 'teacher' || 
-          userUsername === 'admin' ||
-          userUsername === 'teacher' ||
-          userEmail === 'admin@learnict.lk' ||
-          userEmail === 'mano.ict@gmail.com' ||
-          (userEmail.includes('admin') && !userEmail.includes('@student.')) ||
+          userUsername === 'admin' || 
+          userUsername === 'teacher' || 
+          userEmail === 'admin@learnict.lk' || 
+          userEmail === 'mano.ict@gmail.com' || 
+          (userEmail.includes('admin') && !userEmail.includes('@student.')) || 
           (userEmail.includes('teacher') && !userEmail.includes('@student.'));
 
         if (!isAdmin) {
@@ -1040,7 +1040,7 @@ export default function AdminDashboard() {
       const message = `Hello ${student.fullName},
 Your tuition payment for "${courseTitle}" for ${currentMonthName} has not been received yet.
 
-To continue accessing video recordings, handouts, and live classes without interruption, please make the payment and upload your bank deposit slip via the Student Portal (https://guru-lms-demo.vercel.app/login).
+To continue accessing video recordings, handouts, and live classes without interruption, please make the payment and upload your bank deposit slip via the Student Portal (https://www.learnictwithmano.com/login).
 
 Thank you!
 Learn ICT with Mano`;
@@ -1057,7 +1057,7 @@ Learn ICT with Mano`;
 You have been successfully enrolled in "Learn ICT with Mano" LMS.
 
 Courses: ${createdStudentData.selectedCoursesNames}
-Portal URL: https://guru-lms-demo.vercel.app/login
+Portal URL: https://www.learnictwithmano.com/login
 Username: ${createdStudentData.username}
 Password: ${createdStudentData.password}
 
