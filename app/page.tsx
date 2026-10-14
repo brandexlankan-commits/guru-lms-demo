@@ -5,12 +5,21 @@ import Link from 'next/link';
 import { 
   GraduationCap, Video, FileText, Award, ShieldCheck, 
   CheckCircle2, MessageSquare, ArrowRight, Lock, 
-  Sparkles, Laptop, BookOpen, Clock, Users, ChevronRight
+  Sparkles, Laptop, BookOpen, Clock, Users, ChevronRight,
+  Code2, Building2, Layers
 } from 'lucide-react';
 
 export default function Home() {
-  // ගුරුතුමාගේ WhatsApp අංකය (අවශ්‍ය නම් වෙනස් කළ හැක)
-  const teacherWhatsApp = "https://wa.me/94771234567?text=Hello%20Sir,%20I%20would%20like%20to%20enroll%20in%20your%20ICT%20classes.";
+  // 📞 ගුරුතුමාගේ නිල WhatsApp අංකය (0754403630)
+  const teacherPhone = "94754403630";
+  const defaultWhatsAppMsg = encodeURIComponent("ආයුබෝවන් සර්, මම පන්ති පිළිබඳ විස්තර දැනගැනීමට සහ ලියාපදිංචි වීමට කැමතියි.");
+  const teacherWhatsApp = `https://wa.me/${teacherPhone}?text=${defaultWhatsAppMsg}`;
+
+  // එක් එක් පන්තිය සඳහා විශේෂිත WhatsApp පණිවිඩ
+  const getCourseWhatsAppUrl = (courseName: string) => {
+    const msg = encodeURIComponent(`ආයුබෝවන් සර්, මම "${courseName}" පන්තිය පිළිබඳ විස්තර දැනගැනීමට කැමතියි.`);
+    return `https://wa.me/${teacherPhone}?text=${msg}`;
+  };
 
   return (
     <div className="min-h-screen bg-[#070b14] text-white selection:bg-purple-500 selection:text-white font-sans flex flex-col justify-between">
@@ -56,20 +65,20 @@ export default function Home() {
         <section className="relative px-6 pt-16 pb-20 md:pt-24 md:pb-28 overflow-hidden text-center">
           
           {/* Background Glows */}
-          <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[350px] bg-purple-600/15 blur-[120px] rounded-full pointer-events-none -z-10" />
-          <div className="absolute top-1/3 left-1/3 w-[300px] h-[250px] bg-blue-600/10 blur-[100px] rounded-full pointer-events-none -z-10" />
+          <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[650px] h-[380px] bg-purple-600/15 blur-[120px] rounded-full pointer-events-none -z-10" />
+          <div className="absolute top-1/3 left-1/3 w-[350px] h-[260px] bg-indigo-600/10 blur-[100px] rounded-full pointer-events-none -z-10" />
 
           <div className="max-w-4xl mx-auto space-y-6">
             
             {/* Pill Badge */}
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#131c31] border border-purple-500/30 text-purple-300 text-xs font-semibold shadow-inner">
               <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-              <span>ශ්‍රී ලංකාවේ විශිෂ්ටතම Smart ICT අධ්‍යාපනික අත්දැකීම</span>
+              <span>පාසල්, බාහිර උපාධි සහ විශ්වවිද්‍යාල සිසුන් සඳහාම වෙන්වූ Smart LMS පද්ධතිය</span>
             </div>
 
             {/* Main Headline */}
             <h1 className="text-4xl sm:text-6xl font-black tracking-tight leading-[1.15] text-white">
-              විභාගය ඉහළින්ම ජයගන්න, <br />
+              විභාගය සහ උපාධිය ඉහළින්ම ජයගන්න, <br />
               <span className="bg-gradient-to-r from-purple-400 via-indigo-300 to-cyan-300 bg-clip-text text-transparent">
                 තාක්ෂණයේ නිවැරදි මඟපෙන්වීම.
               </span>
@@ -77,7 +86,7 @@ export default function Home() {
 
             {/* Sub-description */}
             <p className="text-slate-300 text-sm sm:text-base max-w-2xl mx-auto leading-relaxed">
-              Grade 6 සිට A/L දක්වා ICT විශය නිර්දේශය මුල සිට සරලව, ප්‍රායෝගික ක්‍රියාකාරකම් සහ නවීන Smart LMS ආරක්ෂිත පද්ධතියක් සමඟින් නිවසේ සිටම හදාරන්න.
+              O/L, A/L ICT විශය නිර්දේශයේ සිට බාහිර උපාධි (BIT, BCS) සහ විශ්වවිද්‍යාල පරිගණක විද්‍යා මොඩියුලයන් දක්වා සියල්ල ප්‍රායෝගිකව සහ සරලව හදාරන්න.
             </p>
 
             {/* Dual CTA Buttons */}
@@ -97,7 +106,7 @@ export default function Home() {
                 className="w-full sm:w-auto px-7 py-3.5 rounded-2xl bg-[#0c1322] hover:bg-[#131c31] text-emerald-400 hover:text-emerald-300 border border-emerald-500/30 font-bold text-sm shadow-lg flex items-center justify-center gap-2 transition cursor-pointer"
               >
                 <MessageSquare className="w-4 h-4 text-emerald-400" />
-                <span>පන්තියට අලුතින් එක්වන්න (WhatsApp)</span>
+                <span>WhatsApp මඟින් විමසන්න (075 440 3630)</span>
               </a>
             </div>
 
@@ -112,75 +121,122 @@ export default function Home() {
           </div>
         </section>
 
-        {/* 3. CLASS GRADES / CATEGORIES */}
+        {/* 3. CLASS CATEGORIES (4 SPECIALIZED TIERS) */}
         <section className="px-6 py-16 bg-[#0c1322]/50 border-y border-slate-800/60">
-          <div className="max-w-6xl mx-auto space-y-10">
+          <div className="max-w-7xl mx-auto space-y-10">
             
             <div className="text-center space-y-2">
-              <span className="text-xs font-bold text-purple-400 tracking-wider uppercase">Classes Offered</span>
-              <h2 className="text-2xl sm:text-3xl font-black text-white">පැවැත්වෙන පන්ති කාණ්ඩ</h2>
-              <p className="text-xs text-slate-400 max-w-md mx-auto">ඔබට අදාළ ශ්‍රේණිය තෝරා පන්තියට සම්බන්ධ වන්න හෝ LMS හරහා ඉගෙනුම අරඹන්න.</p>
+              <span className="text-xs font-bold text-purple-400 tracking-wider uppercase">Our Courses & Classes</span>
+              <h2 className="text-2xl sm:text-3xl font-black text-white">පැවැත්වෙන ප්‍රධාන පන්ති පාඨමාලා</h2>
+              <p className="text-xs text-slate-400 max-w-md mx-auto">ඔබට අදාළ අධ්‍යයන අංශය තෝරා පන්තියට ලියාපදිංචි වන්න හෝ LMS එකට Login වන්න.</p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               
-              {/* Card 1 */}
-              <div className="bg-[#0c1322] border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4 hover:border-purple-500/40 transition group">
-                <div className="w-12 h-12 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center font-bold text-lg">
-                  8-9
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-white group-hover:text-purple-300 transition">Junior ICT (Grade 8 & 9)</h3>
-                  <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                    මූලික පරිගණක තාක්ෂණය, Scratch ක්‍රමලේඛනය සහ පාසල් විශය නිර්දේශය ප්‍රායෝගිකව ආවරණය කෙරේ.
-                  </p>
-                </div>
-                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs">
-                  <span className="text-purple-300 font-semibold">Theory + Practical</span>
-                  <Link href="/login" className="text-slate-400 hover:text-white flex items-center gap-1 font-medium">
-                    පිවිසෙන්න <ChevronRight className="w-3.5 h-3.5" />
-                  </Link>
-                </div>
-              </div>
-
-              {/* Card 2 */}
-              <div className="bg-[#0c1322] border border-purple-500/40 rounded-3xl p-6 shadow-xl shadow-purple-500/5 space-y-4 relative group">
+              {/* Card 1: G.C.E. A/L ICT */}
+              <div className="bg-[#0c1322] border border-purple-500/40 rounded-3xl p-6 shadow-xl shadow-purple-500/5 space-y-4 flex flex-col justify-between relative group hover:border-purple-400 transition">
                 <span className="absolute -top-3 right-6 px-3 py-0.5 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold text-[10px] uppercase tracking-wider">
-                  Most Popular
+                  Advanced Level
                 </span>
-                <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold text-lg">
-                  O/L
+                <div className="space-y-4">
+                  <div className="w-12 h-12 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center font-bold text-lg">
+                    A/L
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-white group-hover:text-purple-300 transition">A/L ICT (උසස් පෙළ)</h3>
+                    <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                      සම්පූර්ණ විශය නිර්දේශය, Python Programming, Database Systems (SQL), Networking සහ පසුගිය විභාග ප්‍රශ්න පත්‍ර සාකච්ඡාව.
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-lg font-bold text-white group-hover:text-indigo-300 transition">Grade 10 & 11 (O/L ICT)</h3>
-                  <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                    සාමාන්‍ය පෙළ විභාග ඉලක්කගත සම්පූර්ණ සිද්ධාන්ත, පසුගිය විභාග ප්‍රශ්න පත්‍ර සහ ආදර්ශ ප්‍රශ්න පත්‍ර පුහුණුව.
-                  </p>
-                </div>
-                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs">
-                  <span className="text-indigo-300 font-semibold">Theory + Paper Class</span>
-                  <Link href="/login" className="text-slate-400 hover:text-white flex items-center gap-1 font-medium">
-                    පිවිසෙන්න <ChevronRight className="w-3.5 h-3.5" />
-                  </Link>
+                <div className="pt-4 border-t border-slate-800/80 space-y-2">
+                  <a 
+                    href={getCourseWhatsAppUrl("A/L ICT Class")}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="w-full py-2 px-3 rounded-xl bg-purple-600/20 hover:bg-purple-600 text-purple-200 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    <span>විමසන්න (WhatsApp)</span>
+                  </a>
                 </div>
               </div>
 
-              {/* Card 3 */}
-              <div className="bg-[#0c1322] border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4 hover:border-cyan-500/40 transition group">
-                <div className="w-12 h-12 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold text-lg">
-                  A/L
+              {/* Card 2: බාහිර උපාධි (External Degrees) */}
+              <div className="bg-[#0c1322] border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4 flex flex-col justify-between hover:border-emerald-500/40 transition group">
+                <div className="space-y-4">
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-lg">
+                    <Building2 className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-white group-hover:text-emerald-300 transition">බාහිර උපාධි (BIT / BCS)</h3>
+                    <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                      UCSC BIT, University of Moratuwa BIT, BCS (HEQ) සහ විවෘත විශ්වවිද්‍යාල (OUSL) බාහිර උපාධි හදාරන සිසුන් සඳහා විශේෂිත මඟපෙන්වීම.
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-lg font-bold text-white group-hover:text-cyan-300 transition">A/L ICT (Advanced Level)</h3>
-                  <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                    උසස් පෙළ ICT සිද්ධාන්ත, Python Programming, Database Systems සහ Networking මුල සිට ගැඹුරින්.
-                  </p>
+                <div className="pt-4 border-t border-slate-800/80 space-y-2">
+                  <a 
+                    href={getCourseWhatsAppUrl("බාහිර උපාධි (BIT/BCS)")}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="w-full py-2 px-3 rounded-xl bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    <span>විමසන්න (WhatsApp)</span>
+                  </a>
                 </div>
-                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs">
-                  <span className="text-cyan-300 font-semibold">Theory + Coding</span>
-                  <Link href="/login" className="text-slate-400 hover:text-white flex items-center gap-1 font-medium">
-                    පිවිසෙන්න <ChevronRight className="w-3.5 h-3.5" />
-                  </Link>
+              </div>
+
+              {/* Card 3: විශ්වවිද්‍යාල සිසුන් (University Students) */}
+              <div className="bg-[#0c1322] border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4 flex flex-col justify-between hover:border-cyan-500/40 transition group">
+                <div className="space-y-4">
+                  <div className="w-12 h-12 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold text-lg">
+                    <Laptop className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-white group-hover:text-cyan-300 transition">විශ්වවිද්‍යාල සිසුන් (Campus)</h3>
+                    <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                      රාජ්‍ය සහ පෞද්ගලික විශ්වවිද්‍යාල (State & Private Campus) සිසුන් සඳහා C/C++, Java, OOP, Data Structures සහ Web Development මොඩියුල පුහුණුව.
+                    </p>
+                  </div>
+                </div>
+                <div className="pt-4 border-t border-slate-800/80 space-y-2">
+                  <a 
+                    href={getCourseWhatsAppUrl("විශ්වවිද්‍යාල IT මොඩියුල")}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="w-full py-2 px-3 rounded-xl bg-cyan-600/20 hover:bg-cyan-600 text-cyan-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    <span>විමසන්න (WhatsApp)</span>
+                  </a>
+                </div>
+              </div>
+
+              {/* Card 4: O/L & Junior ICT */}
+              <div className="bg-[#0c1322] border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4 flex flex-col justify-between hover:border-indigo-500/40 transition group">
+                <div className="space-y-4">
+                  <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold text-lg">
+                    O/L
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-white group-hover:text-indigo-300 transition">Grade 10 & 11 (O/L ICT)</h3>
+                    <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                      සාමාන්‍ය පෙළ A සාමාර්ථයක් ඉලක්ක කරගත් සිද්ධාන්ත, ක්‍රමලේඛන මූලධර්ම සහ පසුගිය විභාග ප්‍රශ්න පත්‍ර සාකච්ඡාව.
+                    </p>
+                  </div>
+                </div>
+                <div className="pt-4 border-t border-slate-800/80 space-y-2">
+                  <a 
+                    href={getCourseWhatsAppUrl("O/L ICT Class")}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="w-full py-2 px-3 rounded-xl bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    <span>විමසන්න (WhatsApp)</span>
+                  </a>
                 </div>
               </div>
 
@@ -247,13 +303,22 @@ export default function Home() {
           <div className="flex items-center gap-2">
             <span className="font-bold text-slate-300">Learn ICT with Mano</span>
             <span>•</span>
+            <span>Hotline: <strong className="text-emerald-400 font-mono">075 440 3630</strong></span>
+            <span>•</span>
             <span>All rights reserved © 2026</span>
           </div>
 
           <div className="flex items-center gap-6">
-            <a href={teacherWhatsApp} target="_blank" rel="noreferrer" className="hover:text-emerald-400 transition">
-              Contact WhatsApp
+            <a 
+              href={teacherWhatsApp} 
+              target="_blank" 
+              rel="noreferrer" 
+              className="hover:text-emerald-400 transition flex items-center gap-1.5"
+            >
+              <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
+              <span>WhatsApp: 075 440 3630</span>
             </a>
+            
             {/* Discreet Teacher/Admin Access link */}
             <Link href="/login" className="hover:text-purple-400 transition font-mono text-[11px]">
               Teacher Login →
