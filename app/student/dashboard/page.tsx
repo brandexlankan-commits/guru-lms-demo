@@ -7,7 +7,8 @@ import {
   Video, PlayCircle, Film, Clock, 
   Calendar, CheckCircle, ExternalLink,
   FileText, Download, Award, UploadCloud, AlertCircle,
-  LogOut, Maximize, Minimize, CreditCard, X, Check
+  LogOut, Maximize, Minimize, CreditCard, X, Check,
+  BookOpen
 } from 'lucide-react';
 
 export default function StudentDashboard() {
@@ -15,6 +16,8 @@ export default function StudentDashboard() {
   const playerContainerRef = useRef<HTMLDivElement>(null);
 
   const [currentUser, setCurrentUser] = useState<any>(null);
+  
+  // Multiple Courses State (මෙතැනින් තමා Courses Tabs මාරු වෙන්නේ)
   const [courses, setCourses] = useState<any[]>([]);
   const [activeCourse, setActiveCourse] = useState<any | null>(null);
 
@@ -44,6 +47,7 @@ export default function StudentDashboard() {
   const [slipAmount, setSlipAmount] = useState('');
   const [uploadingSlip, setUploadingSlip] = useState(false);
   const [slipSuccessMsg, setSlipSuccessMsg] = useState(false);
+  const [slipStatus, setSlipStatus] = useState<string | null>(null);
 
   // Floating Watermark position state
   const [watermarkPos, setWatermarkPos] = useState({ top: '30%', left: '40%' });
@@ -77,36 +81,45 @@ export default function StudentDashboard() {
       }
       setCurrentUser(user);
 
+      // Fetch all enrolled courses for this student
       const { data: enrollments } = await supabase
         .from('course_enrollments')
         .select('*, courses(*)')
         .eq('user_id', user.id);
 
       if (enrollments && enrollments.length > 0) {
-        const enrolledCourses = enrollments.map((e: any) => ({
-          ...e.courses,
-          enrollmentId: e.id,
-          validUntil: e.valid_until,
-          status: e.status || 'active',
-        }));
+        const enrolledCourses = enrollments
+          .filter((e: any) => e.courses)
+          .map((e: any) => ({
+            ...e.courses,
+            enrollmentId: e.id,
+            validUntil: e.valid_until,
+            status: e.status || 'active',
+          }));
+        
         setCourses(enrolledCourses);
-        const defaultCourse = enrolledCourses[0];
-        setActiveCourse(defaultCourse);
-        setSlipAmount(defaultCourse.monthly_fee ? defaultCourse.monthly_fee.toString() : '1500');
-        loadCourseContent(defaultCourse.id, user.id);
+        
+        if (enrolledCourses.length > 0) {
+          const defaultCourse = enrolledCourses[0];
+          setActiveCourse(defaultCourse);
+          setSlipAmount(defaultCourse.monthly_fee ? defaultCourse.monthly_fee.toString() : '1500');
+          loadCourseContent(defaultCourse.id, user.id);
+        }
+      } else {
+        setCourses([]);
+        setLoading(false);
       }
     } catch (e) {
       console.error(e);
-    } finally {
       setLoading(false);
     }
   };
 
   const loadCourseContent = async (courseId: string, userId?: string) => {
+    setLoading(true);
     try {
       const targetUserId = userId || currentUser?.id;
 
-      // 1. Fetch Live Class
       const { data: live } = await supabase
         .from('live_classes')
         .select('*')
@@ -114,16 +127,13 @@ export default function StudentDashboard() {
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
-
       setLiveClass(live || null);
 
-      // 2. Fetch Recordings
       const { data: recs } = await supabase
         .from('recordings')
         .select('*')
         .eq('course_id', courseId)
         .order('created_at', { ascending: false });
-
       setRecordings(recs || []);
       if (recs && recs.length > 0) {
         setActiveRecording(recs[0]);
@@ -131,14 +141,12 @@ export default function StudentDashboard() {
         setActiveRecording(null);
       }
 
-      // 3. Fetch Tutes / Materials
       let matsData: any[] = [];
       const { data: mats } = await supabase
         .from('course_materials')
         .select('*')
         .eq('course_id', courseId)
         .order('created_at', { ascending: false });
-
       if (mats && mats.length > 0) {
         matsData = mats;
       } else {
@@ -151,35 +159,34 @@ export default function StudentDashboard() {
           matsData = fallbackMats;
         }
       }
-
       setMaterials(matsData);
 
-      // 4. Fetch Assignments
       const { data: assigns } = await supabase
         .from('assignments')
         .select('*')
         .eq('course_id', courseId)
         .order('created_at', { ascending: false });
-
       setAssignments(assigns || []);
 
-      // 5. Fetch student submissions
       if (targetUserId) {
         const { data: userSubs } = await supabase
           .from('assignment_submissions')
           .select('*')
           .eq('student_id', targetUserId);
-
         setSubmissions(userSubs || []);
       }
     } catch (e) {
       console.error(e);
+    } finally {
+      setLoading(false);
     }
   };
 
+  // Switch Course dynamically when tab is clicked
   const handleSelectCourse = (course: any) => {
     setActiveCourse(course);
     setSlipAmount(course.monthly_fee ? course.monthly_fee.toString() : '1500');
+    setActiveTab('videos');
     loadCourseContent(course.id);
   };
 
@@ -204,38 +211,17 @@ export default function StudentDashboard() {
       alert('Please select your answer sheet (PDF or Image file).');
       return;
     }
-
     setUploadingSubmission(true);
     try {
       const fileExt = submissionFile.name.split('.').pop();
       const storagePath = `submissions/${assignmentId}_${currentUser.id}_${Date.now()}.${fileExt}`;
-
-      const { error: uploadErr } = await supabase.storage
-        .from('lms-materials')
-        .upload(storagePath, submissionFile, { cacheControl: '3600', upsert: true });
-
+      const { error: uploadErr } = await supabase.storage.from('lms-materials').upload(storagePath, submissionFile, { cacheControl: '3600', upsert: true });
       if (uploadErr) throw uploadErr;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('lms-materials')
-        .getPublicUrl(storagePath);
-
-      const { data: subData, error: dbErr } = await supabase
-        .from('assignment_submissions')
-        .upsert([
-          {
-            assignment_id: assignmentId,
-            student_id: currentUser.id,
-            submission_file_url: publicUrl,
-            status: 'submitted',
-            submitted_at: new Date().toISOString(),
-          },
-        ])
-        .select()
-        .single();
-
+      const { data: { publicUrl } } = supabase.storage.from('lms-materials').getPublicUrl(storagePath);
+      const { data: subData, error: dbErr } = await supabase.from('assignment_submissions').upsert([
+        { assignment_id: assignmentId, student_id: currentUser.id, submission_file_url: publicUrl, status: 'submitted', submitted_at: new Date().toISOString() },
+      ]).select().single();
       if (dbErr) throw dbErr;
-
       alert('Answer sheet submitted successfully!');
       setSubmissions(prev => [subData, ...prev.filter(s => s.assignment_id !== assignmentId)]);
       setSubmittingAssignId(null);
@@ -253,38 +239,21 @@ export default function StudentDashboard() {
       alert('Please select a bank slip file.');
       return;
     }
-
     setUploadingSlip(true);
     setSlipSuccessMsg(false);
-
     try {
       const cleanFileName = slipFile.name.replace(/[^a-zA-Z0-9.-]/g, '_');
       const storagePath = `slips/${currentUser.id}_${activeCourse.id}_${Date.now()}_${cleanFileName}`;
-
-      const { error: uploadErr } = await supabase.storage
-        .from('lms-materials')
-        .upload(storagePath, slipFile, { cacheControl: '3600', upsert: true });
-
+      const { error: uploadErr } = await supabase.storage.from('lms-materials').upload(storagePath, slipFile, { cacheControl: '3600', upsert: true });
       if (uploadErr) throw uploadErr;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('lms-materials')
-        .getPublicUrl(storagePath);
-
+      const { data: { publicUrl } } = supabase.storage.from('lms-materials').getPublicUrl(storagePath);
       const res = await fetch('/api/student/upload-slip', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          studentId: currentUser.id,
-          courseId: activeCourse.id,
-          amount: parseFloat(slipAmount) || activeCourse.monthly_fee || 0,
-          slipUrl: publicUrl,
-        }),
+        body: JSON.stringify({ studentId: currentUser.id, courseId: activeCourse.id, amount: parseFloat(slipAmount) || activeCourse.monthly_fee || 0, slipUrl: publicUrl }),
       });
-
       const resData = await res.json();
       if (!res.ok) throw new Error(resData.error || 'Slip submission failed');
-
       setSlipSuccessMsg(true);
       setTimeout(() => {
         setShowSlipModal(false);
@@ -302,18 +271,24 @@ export default function StudentDashboard() {
   const isCourseSuspended = activeCourse?.status === 'suspended';
   const isCourseExpired = activeCourse?.validUntil && new Date(activeCourse.validUntil) < new Date();
 
+  if (loading && !activeCourse) {
+    return (
+      <div className="min-h-screen bg-[#070b14] flex items-center justify-center text-white">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-slate-400 text-sm">Loading your classes...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-[#070b14] text-white p-4 md:p-8 font-sans select-none">
-      {/* Top Header */}
+    <div className="min-h-screen bg-[#070b14] text-white p-4 md:p-8 font-sans select-none pb-16">
       <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 border-b border-slate-800 max-w-7xl mx-auto">
         <div className="flex items-center justify-between w-full sm:w-auto">
           <div className="flex items-center gap-3.5">
             <div className="w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-white border-2 border-purple-500/50 flex items-center justify-center shadow-xl shadow-purple-500/25 overflow-hidden shrink-0">
-              <img 
-                src="/logo.png" 
-                alt="Learn ICT with Mano" 
-                className="w-full h-full object-contain scale-[2.4] transform" 
-              />
+              <img src="/logo.png" alt="Learn ICT with Mano" className="w-full h-full object-contain scale-[2.4] transform" />
             </div>
             <div>
               <h1 className="text-base sm:text-lg font-black tracking-tight text-white flex items-center gap-2">
@@ -322,628 +297,350 @@ export default function StudentDashboard() {
               <p className="text-[11px] sm:text-xs text-slate-400">Student Portal • Welcome, <span className="text-purple-300 font-mono">@{username}</span></p>
             </div>
           </div>
-
-          <button
-            onClick={handleLogout}
-            className="sm:hidden p-2 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500 hover:text-white transition cursor-pointer flex items-center gap-1 text-xs"
-            title="Log out"
-          >
+          <button onClick={handleLogout} className="sm:hidden p-2 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500 hover:text-white transition cursor-pointer flex items-center gap-1 text-xs" title="Log out">
             <LogOut className="w-4 h-4" />
           </button>
         </div>
 
         <div className="flex flex-wrap items-center justify-between sm:justify-end gap-2.5 w-full sm:w-auto">
+          {/* Multiple Courses Select Tabs (ශිෂ්‍යයාට තමන්ගේ පන්ති මාරු කරගන්නා තැන) */}
           <div className="flex flex-wrap gap-2">
-            {courses.map((c) => (
+            {courses.length > 0 ? courses.map((c) => (
               <button
                 key={c.id}
                 onClick={() => handleSelectCourse(c)}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer ${
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-sm ${
                   activeCourse?.id === c.id
-                    ? 'bg-purple-600 text-white shadow-md'
-                    : 'bg-[#0c1322] border border-slate-800 text-slate-400 hover:text-white'
+                    ? 'bg-purple-600 text-white shadow-purple-600/30 border border-purple-500/50'
+                    : 'bg-[#131c31] border border-slate-700 text-slate-400 hover:text-white'
                 }`}
               >
-                📖 {c.title}
+                <BookOpen className={`w-3.5 h-3.5 ${activeCourse?.id === c.id ? 'text-white' : 'text-purple-400'}`} />
+                <span className="truncate max-w-[120px] sm:max-w-xs">{c.title}</span>
               </button>
-            ))}
+            )) : (
+              <span className="text-xs text-slate-500">No active classes found.</span>
+            )}
           </div>
-
-          <button
-            onClick={handleLogout}
-            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-500/10 border border-red-500/20 hover:bg-red-500 hover:text-white text-red-400 text-xs font-semibold transition cursor-pointer shadow-sm"
-          >
+          <button onClick={handleLogout} className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-500/10 border border-red-500/20 hover:bg-red-500 hover:text-white text-red-400 text-xs font-semibold transition cursor-pointer shadow-sm">
             <LogOut className="w-3.5 h-3.5" />
             <span>Log out</span>
           </button>
         </div>
       </header>
 
-      {/* Main Content Area */}
       <main className="max-w-7xl mx-auto mt-6 space-y-6">
-        
-        {/* ⚠️ Access Suspended or Expired Warning Banner */}
-        {activeCourse && (isCourseSuspended || isCourseExpired) && (
-          <div className="bg-red-950/40 border border-red-500/40 p-5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-2xl">
-            <div className="flex items-center gap-3.5">
-              <div className="w-12 h-12 rounded-xl bg-red-500/20 border border-red-500/30 flex items-center justify-center text-red-400 text-2xl shrink-0">
-                ⚠️️
-              </div>
-              <div>
-                <h3 className="text-sm sm:text-base font-bold text-red-300">
-                  {isCourseSuspended ? 'Access Temporarily Suspended for this Course' : 'Tuition Fee Access Period Has Expired'}
-                </h3>
-                <p className="text-xs text-slate-300 mt-0.5">
-                  Please complete your monthly class fee payment and upload your bank deposit slip here.
-                </p>
-              </div>
-            </div>
-
-            <button
-              onClick={() => setShowSlipModal(true)}
-              className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-lg transition flex items-center justify-center gap-2 cursor-pointer shrink-0"
-            >
-              <CreditCard className="w-4 h-4" />
-              <span>💳 Upload Bank Slip</span>
-            </button>
+        {!activeCourse ? (
+          <div className="p-8 text-center bg-[#0c1322] border border-slate-800 rounded-3xl space-y-3">
+            <AlertCircle className="w-10 h-10 text-amber-500 mx-auto" />
+            <h3 className="font-bold text-base text-white">ඔබ තවමත් කිසිදු පන්තියකට Enroll කර නොමැත.</h3>
+            <p className="text-xs text-slate-400">කරුණාකර ගුරුතුමා අමතා ඔබගේ පන්තියට ලියාපදිංචි කරවා ගන්න.</p>
           </div>
-        )}
-
-        {/* Course Info Banner */}
-        {activeCourse && (
-          <div className="bg-[#0c1322] border border-slate-800 p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4 shadow-xl">
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-white">{activeCourse.title}</h2>
-                <span className="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 text-[10px] font-bold">
-                  {activeCourse.category} • {activeCourse.type}
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Validity: <strong className={isCourseSuspended || isCourseExpired ? 'text-red-400' : 'text-emerald-400'}>
-                  {isCourseSuspended ? 'Suspended' : activeCourse.validUntil ? `Until ${new Date(activeCourse.validUntil).toLocaleDateString('en-US')}` : 'Active'}
-                </strong>
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3">
-              <span className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 ${
-                isCourseSuspended || isCourseExpired
-                  ? 'bg-red-500/10 border-red-500/30 text-red-400'
-                  : 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400'
-              }`}>
-                <CheckCircle className="w-3.5 h-3.5" /> {isCourseSuspended ? 'Access Suspended' : isCourseExpired ? 'Expired' : 'Access Active'}
-              </span>
-
-              <button
-                onClick={() => setShowSlipModal(true)}
-                className="px-4 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/40 font-bold text-xs transition flex items-center gap-1.5 cursor-pointer shadow-md"
-              >
-                <CreditCard className="w-4 h-4" />
-                <span>💳 Upload Bank Slip</span>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Navigation Tabs */}
-        <div className="flex items-center gap-2 bg-[#0c1322] p-1.5 rounded-2xl border border-slate-800 w-fit">
-          <button
-            onClick={() => setActiveTab('videos')}
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
-              activeTab === 'videos'
-                ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/20'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <Video className="w-4 h-4" />
-            <span>🎥 Videos & Live ({recordings.length})</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('materials')}
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
-              activeTab === 'materials'
-                ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/20'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <FileText className="w-4 h-4 text-emerald-400" />
-            <span>📑 Handouts & Tutes ({materials.length})</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('assignments')}
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
-              activeTab === 'assignments'
-                ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/20'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <Award className="w-4 h-4 text-amber-400" />
-            <span>📝 Assignments & Tasks ({assignments.length})</span>
-          </button>
-        </div>
-
-        {/* TAB 1: VIDEOS & LIVE CLASS */}
-        {activeTab === 'videos' && (
-          <div className="space-y-6">
-            {liveClass ? (
-              <div className="bg-gradient-to-r from-purple-950/40 via-[#0c1322] to-[#131c31] border border-purple-500/40 rounded-2xl p-5 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-purple-600/30 border border-purple-500/40 flex items-center justify-center text-purple-300 animate-pulse">
-                    <Video className="w-6 h-6" />
-                  </div>
+        ) : (
+          <>
+            {(isCourseSuspended || isCourseExpired) && (
+              <div className="bg-red-950/40 border border-red-500/40 p-5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-2xl">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-xl bg-red-500/20 border border-red-500/30 flex items-center justify-center text-red-400 text-2xl shrink-0">⚠</div>
                   <div>
-                    <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[10px] font-bold uppercase tracking-wider">
-                      🔴 Live Zoom Class
-                    </span>
-                    <h3 className="text-base font-bold text-white mt-1">{liveClass.title}</h3>
-                    <div className="flex items-center gap-4 text-xs text-slate-400 mt-1">
-                      <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5 text-purple-400" /> {liveClass.date}</span>
-                      <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-purple-400" /> {liveClass.time}</span>
-                    </div>
+                    <h3 className="text-sm sm:text-base font-bold text-red-300">
+                      {isCourseSuspended ? 'Access Temporarily Suspended for this Course' : 'Tuition Fee Access Period Has Expired'}
+                    </h3>
+                    <p className="text-xs text-slate-300 mt-0.5">Please complete your monthly class fee payment and upload your bank deposit slip here.</p>
                   </div>
                 </div>
-
-                <a
-                  href={liveClass.zoom_join_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="w-full sm:w-auto px-6 py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-lg shadow-purple-600/30 transition text-center cursor-pointer flex items-center justify-center gap-2"
-                >
-                  <span>🎥 Join Live Zoom Class</span>
-                </a>
-              </div>
-            ) : (
-              <div className="bg-[#0c1322] border border-slate-800 p-4 rounded-2xl text-center text-xs text-slate-500">
-                No live Zoom classes currently scheduled for this course.
+                <button onClick={() => setShowSlipModal(true)} className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-lg transition flex items-center justify-center gap-2 cursor-pointer shrink-0">
+                  <CreditCard className="w-4 h-4" />
+                  <span>💳 Upload Bank Slip</span>
+                </button>
               </div>
             )}
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-              {/* YouTube Protected Player */}
-              <div className="lg:col-span-8 bg-[#0c1322] border border-slate-800/80 rounded-2xl p-5 shadow-2xl space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-                  <div className="flex items-center gap-2">
-                    <Film className="w-5 h-5 text-red-500" />
-                    <h3 className="font-bold text-sm">Protected Class Recordings</h3>
-                    <span className="text-[10px] bg-red-500/10 border border-red-500/20 text-red-400 px-2.5 py-0.5 rounded-full font-bold ml-2">
-                      YouTube Package Data
-                    </span>
-                  </div>
-
-                  {activeRecording && (
-                    <button
-                      onClick={toggleFullScreen}
-                      className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer border border-slate-700/60"
-                      title="Fullscreen"
-                    >
-                      {isFullscreen ? <Minimize className="w-3.5 h-3.5" /> : <Maximize className="w-3.5 h-3.5" />}
-                      <span className="text-[11px]">{isFullscreen ? 'Exit Fullscreen' : '⛶ Fullscreen'}</span>
-                    </button>
-                  )}
+            <div className="bg-[#0c1322] border border-slate-800 p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4 shadow-xl">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-bold text-white">{activeCourse.title}</h2>
+                  <span className="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 text-[10px] font-bold">{activeCourse.category} {activeCourse.type}</span>
                 </div>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Validity: <strong className={isCourseSuspended || isCourseExpired ? 'text-red-400' : 'text-emerald-400'}>
+                    {isCourseSuspended ? 'Suspended' : activeCourse.validUntil ? `Until ${new Date(activeCourse.validUntil).toLocaleDateString('en-US')}` : 'Active'}
+                  </strong>
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 ${
+                  isCourseSuspended || isCourseExpired ? 'bg-red-500/10 border-red-500/30 text-red-400' : 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400'
+                }`}>
+                  <CheckCircle className="w-3.5 h-3.5" /> {isCourseSuspended ? 'Access Suspended' : isCourseExpired ? 'Expired' : 'Access Active'}
+                </span>
+                <button onClick={() => setShowSlipModal(true)} className="px-4 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/40 font-bold text-xs transition flex items-center gap-1.5 cursor-pointer shadow-md">
+                  <CreditCard className="w-4 h-4" />
+                  <span>💳 Upload Bank Slip</span>
+                </button>
+              </div>
+            </div>
 
-                <div 
-                  ref={playerContainerRef}
-                  className="relative aspect-video w-full rounded-2xl bg-black border border-slate-800 overflow-hidden shadow-2xl flex items-center justify-center group"
-                  onContextMenu={(e) => e.preventDefault()}
-                >
-                  {activeRecording ? (
-                    <>
-                      <iframe
-                        src={`https://www.youtube-nocookie.com/embed/${activeRecording.video_id}?rel=0&modestbranding=1&controls=1&showinfo=0&disablekb=0&fs=0`}
-                        title={activeRecording.title}
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                        className="w-full h-full border-0"
-                      />
+            <div className="flex items-center gap-2 bg-[#0c1322] p-1.5 rounded-2xl border border-slate-800 w-fit">
+              <button onClick={() => setActiveTab('videos')} className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${activeTab === 'videos' ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/20' : 'text-slate-400 hover:text-white'}`}>
+                <Video className="w-4 h-4" /> <span>🎥 Videos & Live ({recordings.length})</span>
+              </button>
+              <button onClick={() => setActiveTab('materials')} className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${activeTab === 'materials' ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/20' : 'text-slate-400 hover:text-white'}`}>
+                <FileText className="w-4 h-4 text-emerald-400" /> <span>📑 Handouts & Tutes ({materials.length})</span>
+              </button>
+              <button onClick={() => setActiveTab('assignments')} className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${activeTab === 'assignments' ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/20' : 'text-slate-400 hover:text-white'}`}>
+                <Award className="w-4 h-4 text-amber-400" /> <span>📝 Assignments & Tasks ({assignments.length})</span>
+              </button>
+            </div>
 
-                      {/* 1. Fullscreen Exit Floating Button */}
-                      {isFullscreen && (
-                        <button
-                          type="button"
-                          onClick={toggleFullScreen}
-                          className="absolute top-4 right-4 z-40 px-3.5 py-2 rounded-xl bg-black/85 hover:bg-purple-600 text-white text-xs font-bold flex items-center gap-1.5 border border-white/20 shadow-2xl backdrop-blur-md cursor-pointer transition transform hover:scale-105"
-                        >
-                          <Minimize className="w-4 h-4 text-purple-300" />
-                          <span>Exit Fullscreen</span>
-                        </button>
-                      )}
-
-                      {/* 2. Top-Shield: Title & Channel overlay */}
-                      <div 
-                        className="absolute top-0 left-0 right-32 h-16 z-20 bg-transparent cursor-default pointer-events-auto" 
-                        onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
-                        onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
-                        onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
-                        onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); }}
-                      />
-
-                      {/* 3. Bottom-Left Shield: Copy Link Icon overlay */}
-                      <div 
-                        className="absolute bottom-0 left-0 w-36 h-24 z-20 bg-transparent cursor-default pointer-events-auto"
-                        onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
-                        onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
-                        onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
-                        onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); }}
-                      />
-
-                      {/* 4. Bottom-Right Shield: "Watch on YouTube" overlay */}
-                      <div 
-                        className="absolute bottom-0 right-0 w-64 h-16 z-20 bg-transparent cursor-default pointer-events-auto"
-                        onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
-                        onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
-                        onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
-                        onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); }}
-                      />
-
-                      {/* 5. Ultra-Translucent Faint Watermark */}
-                      <div 
-                        className="absolute z-30 pointer-events-none transition-all duration-1000 ease-in-out select-none"
-                        style={{ top: watermarkPos.top, left: watermarkPos.left }}
-                      >
-                        <div className="text-[11px] font-mono font-medium text-white/20 tracking-widest uppercase drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">
-                          @{username} • Protected
+            {activeTab === 'videos' && (
+              <div className="space-y-6">
+                {liveClass ? (
+                  <div className="bg-gradient-to-r from-purple-950/40 via-[#0c1322] to-[#131c31] border border-purple-500/40 rounded-2xl p-5 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-xl bg-purple-600/30 border border-purple-500/40 flex items-center justify-center text-purple-300 animate-pulse">
+                        <Video className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[10px] font-bold uppercase tracking-wider">🔴 Live Zoom Class</span>
+                        <h3 className="text-base font-bold text-white mt-1">{liveClass.title}</h3>
+                        <div className="flex items-center gap-4 text-xs text-slate-400 mt-1">
+                          <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5 text-purple-400" /> {liveClass.date}</span>
+                          <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-purple-400" /> {liveClass.time}</span>
                         </div>
                       </div>
-                    </>
-                  ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center text-center p-6 text-slate-500 space-y-2">
-                      <PlayCircle className="w-12 h-12 text-slate-700" />
-                      <p className="text-xs">No recordings available for this course yet.</p>
                     </div>
-                  )}
-                </div>
+                    <a href={liveClass.zoom_join_url} target="_blank" rel="noreferrer" className="w-full sm:w-auto px-6 py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-lg shadow-purple-600/30 transition text-center cursor-pointer flex items-center justify-center gap-2">
+                      <span>🎥 Join Live Zoom Class</span>
+                    </a>
+                  </div>
+                ) : (
+                  <div className="bg-[#0c1322] border border-slate-800 p-4 rounded-2xl text-center text-xs text-slate-500">No live Zoom classes currently scheduled for this course.</div>
+                )}
 
-                {activeRecording && (
-                  <div className="pt-2">
-                    <h4 className="text-sm font-bold text-white">{activeRecording.title}</h4>
-                    <div className="flex items-center gap-4 text-xs text-slate-400 mt-1">
-                      <span>📅 Date: {activeRecording.lesson_date}</span>
-                      <span>⏱️ Duration: {activeRecording.duration || '2h 00m'}</span>
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                  <div className="lg:col-span-8 bg-[#0c1322] border border-slate-800/80 rounded-2xl p-5 shadow-2xl space-y-4">
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                      <div className="flex items-center gap-2">
+                        <Film className="w-5 h-5 text-red-500" />
+                        <h3 className="font-bold text-sm">Protected Class Recordings</h3>
+                      </div>
+                      {activeRecording && (
+                        <button onClick={toggleFullScreen} className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer border border-slate-700/60" title="Fullscreen">
+                          {isFullscreen ? <Minimize className="w-3.5 h-3.5" /> : <Maximize className="w-3.5 h-3.5" />}
+                          <span className="text-[11px]">{isFullscreen ? 'Exit Fullscreen' : '⛶ Fullscreen'}</span>
+                        </button>
+                      )}
                     </div>
+                    <div ref={playerContainerRef} className="relative aspect-video w-full rounded-2xl bg-black border border-slate-800 overflow-hidden shadow-2xl flex items-center justify-center group" onContextMenu={(e) => e.preventDefault()}>
+                      {activeRecording ? (
+                        <>
+                          <iframe src={`https://www.youtube-nocookie.com/embed/${activeRecording.video_id}?rel=0&modestbranding=1&controls=1&showinfo=0&disablekb=0&fs=0`} title={activeRecording.title} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" className="w-full h-full border-0" />
+                          {isFullscreen && (
+                            <button type="button" onClick={toggleFullScreen} className="absolute top-4 right-4 z-40 px-3.5 py-2 rounded-xl bg-black/85 hover:bg-purple-600 text-white text-xs font-bold flex items-center gap-1.5 border border-white/20 shadow-2xl backdrop-blur-md cursor-pointer transition transform hover:scale-105">
+                              <Minimize className="w-4 h-4 text-purple-300" /> <span>Exit Fullscreen</span>
+                            </button>
+                          )}
+                          <div className="absolute top-0 left-0 right-32 h-16 z-20 bg-transparent cursor-default" />
+                          <div className="absolute bottom-0 left-0 w-36 h-24 z-20 bg-transparent cursor-default" />
+                          <div className="absolute bottom-0 right-0 w-64 h-16 z-20 bg-transparent cursor-default" />
+                          <div className="absolute z-30 pointer-events-none transition-all duration-1000 ease-in-out select-none" style={{ top: watermarkPos.top, left: watermarkPos.left }}>
+                            <div className="text-[11px] font-mono font-medium text-white/20 tracking-widest uppercase drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">@{username}Protected</div>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="w-full h-full flex flex-col items-center justify-center text-center p-6 text-slate-500 space-y-2">
+                          <PlayCircle className="w-12 h-12 text-slate-700" />
+                          <p className="text-xs">No recordings available for this course yet.</p>
+                        </div>
+                      )}
+                    </div>
+                    {activeRecording && (
+                      <div className="pt-2">
+                        <h4 className="text-sm font-bold text-white">{activeRecording.title}</h4>
+                        <div className="flex items-center gap-4 text-xs text-slate-400 mt-1">
+                          <span>📅 Date: {activeRecording.lesson_date}</span>
+                          <span>⏱️ Duration: {activeRecording.duration || '2h 00m'}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="lg:col-span-4 bg-[#0c1322] border border-slate-800/80 rounded-2xl p-5 shadow-2xl space-y-4">
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                      <h3 className="font-bold text-sm">Course Playlist ({recordings.length})</h3>
+                    </div>
+                    <div className="space-y-2.5 max-h-[440px] overflow-y-auto pr-1">
+                      {recordings.length === 0 ? (
+                        <div className="p-8 text-center text-xs text-slate-500">No recordings found.</div>
+                      ) : (
+                        recordings.map((rec) => (
+                          <button key={rec.id} onClick={() => setActiveRecording(rec)} className={`w-full text-left p-3.5 rounded-xl border transition cursor-pointer flex items-center gap-3 ${activeRecording?.id === rec.id ? 'bg-red-500/10 border-red-500/40 text-white' : 'bg-[#131c31] border-slate-800 hover:border-slate-700 text-slate-300'}`}>
+                            <PlayCircle className={`w-5 h-5 shrink-0 ${activeRecording?.id === rec.id ? 'text-red-400' : 'text-slate-500'}`} />
+                            <div className="overflow-hidden">
+                              <h5 className="text-xs font-semibold line-clamp-1">{rec.title}</h5>
+                              <div className="flex items-center gap-3 text-[10px] text-slate-400 mt-0.5">
+                                <span>📅 {rec.lesson_date}</span>
+                                <span>⏱️ {rec.duration || '2h 00m'}</span>
+                              </div>
+                            </div>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'materials' && (
+              <div className="bg-[#0c1322] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
+                <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+                  <div>
+                    <h3 className="text-base font-bold text-white flex items-center gap-2"><FileText className="w-5 h-5 text-emerald-400" /><span>Course Handouts & Study Materials</span></h3>
+                  </div>
+                </div>
+                {materials.length === 0 ? (
+                  <div className="p-16 rounded-xl bg-slate-900/30 border border-dashed border-slate-800 text-center space-y-2">
+                    <FileText className="w-10 h-10 text-slate-600 mx-auto" />
+                    <h4 className="text-sm font-semibold text-slate-300">No study materials uploaded yet</h4>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {materials.map((mat) => (
+                      <div key={mat.id} className="p-5 rounded-2xl bg-[#131c31] border border-slate-800 hover:border-emerald-500/40 transition flex flex-col justify-between space-y-4 group">
+                        <div className="space-y-2">
+                          <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center"><FileText className="w-5 h-5" /></div>
+                          <h4 className="text-sm font-bold text-white group-hover:text-emerald-300 transition line-clamp-2">{mat.title}</h4>
+                          {mat.description && <p className="text-xs text-slate-400 line-clamp-2">{mat.description}</p>}
+                        </div>
+                        <div className="space-y-3 pt-3 border-t border-slate-800/80">
+                          <div className="flex items-center justify-between text-[10px] text-slate-500">
+                            <span>📦 {mat.file_size || 'PDF'}</span>
+                            <span>📅 {new Date(mat.created_at).toLocaleDateString('en-US')}</span>
+                          </div>
+                          <a href={mat.file_url} target="_blank" rel="noreferrer" className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-emerald-600/20">
+                            <Download className="w-4 h-4" /><span>Download PDF Handout</span>
+                          </a>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
-
-              {/* Recordings Playlist */}
-              <div className="lg:col-span-4 bg-[#0c1322] border border-slate-800/80 rounded-2xl p-5 shadow-2xl space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-                  <h3 className="font-bold text-sm">Course Playlist ({recordings.length})</h3>
-                  <span className="text-[10px] text-slate-500">Video Lessons</span>
-                </div>
-
-                <div className="space-y-2.5 max-h-[440px] overflow-y-auto pr-1">
-                  {recordings.length === 0 ? (
-                    <div className="p-8 text-center text-xs text-slate-500">No recordings found.</div>
-                  ) : (
-                    recordings.map((rec) => (
-                      <button
-                        key={rec.id}
-                        onClick={() => setActiveRecording(rec)}
-                        className={`w-full text-left p-3.5 rounded-xl border transition cursor-pointer flex items-center gap-3 ${
-                          activeRecording?.id === rec.id
-                            ? 'bg-red-500/10 border-red-500/40 text-white'
-                            : 'bg-[#131c31] border-slate-800 hover:border-slate-700 text-slate-300'
-                        }`}
-                      >
-                        <PlayCircle className={`w-5 h-5 shrink-0 ${activeRecording?.id === rec.id ? 'text-red-400' : 'text-slate-500'}`} />
-                        <div className="overflow-hidden">
-                          <h5 className="text-xs font-semibold line-clamp-1">{rec.title}</h5>
-                          <div className="flex items-center gap-3 text-[10px] text-slate-400 mt-0.5">
-                            <span>📅 {rec.lesson_date}</span>
-                            <span>⏱️ {rec.duration || '2h 00m'}</span>
-                          </div>
-                        </div>
-                      </button>
-                    ))
-                  )}
-                </div>
-              </div>
-
-            </div>
-          </div>
-        )}
-
-        {/* TAB 2: TUTES & STUDY MATERIALS */}
-        {activeTab === 'materials' && (
-          <div className="bg-[#0c1322] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
-              <div>
-                <h3 className="text-base font-bold text-white flex items-center gap-2">
-                  <FileText className="w-5 h-5 text-emerald-400" />
-                  <span>Course Handouts & Study Materials</span>
-                </h3>
-                <p className="text-xs text-slate-400 mt-0.5">View and download all official class handouts, tutes, and past papers.</p>
-              </div>
-              <span className="px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold">
-                {materials.length} Handouts
-              </span>
-            </div>
-
-            {materials.length === 0 ? (
-              <div className="p-16 rounded-xl bg-slate-900/30 border border-dashed border-slate-800 text-center space-y-2">
-                <FileText className="w-10 h-10 text-slate-600 mx-auto" />
-                <h4 className="text-sm font-semibold text-slate-300">No study materials uploaded yet</h4>
-                <p className="text-xs text-slate-500">Materials will appear here once published by the teacher.</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {materials.map((mat) => (
-                  <div key={mat.id} className="p-5 rounded-2xl bg-[#131c31] border border-slate-800 hover:border-emerald-500/40 transition flex flex-col justify-between space-y-4 group">
-                    <div className="space-y-2">
-                      <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
-                        <FileText className="w-5 h-5" />
-                      </div>
-                      <h4 className="text-sm font-bold text-white group-hover:text-emerald-300 transition line-clamp-2">{mat.title}</h4>
-                      {mat.description && (
-                        <p className="text-xs text-slate-400 line-clamp-2">{mat.description}</p>
-                      )}
-                    </div>
-
-                    <div className="space-y-3 pt-3 border-t border-slate-800/80">
-                      <div className="flex items-center justify-between text-[10px] text-slate-500">
-                        <span>📦 {mat.file_size || 'PDF'}</span>
-                        <span>📅 {new Date(mat.created_at).toLocaleDateString('en-US')}</span>
-                      </div>
-                      <a
-                        href={mat.file_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-emerald-600/20"
-                      >
-                        <Download className="w-4 h-4" />
-                        <span>Download PDF Handout</span>
-                      </a>
-                    </div>
-                  </div>
-                ))}
-              </div>
             )}
-          </div>
-        )}
 
-        {/* TAB 3: ASSIGNMENTS & DEADLINES */}
-        {activeTab === 'assignments' && (
-          <div className="bg-[#0c1322] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
-              <div>
-                <h3 className="text-base font-bold text-white flex items-center gap-2">
-                  <Award className="w-5 h-5 text-amber-400" />
-                  <span>Assignments & Evaluations</span>
-                </h3>
-                <p className="text-xs text-slate-400 mt-0.5">Submit your homework and answer sheets before the specified deadline.</p>
-              </div>
-              <span className="px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold">
-                {assignments.length} Tasks
-              </span>
-            </div>
-
-            {assignments.length === 0 ? (
-              <div className="p-16 rounded-xl bg-slate-900/30 border border-dashed border-slate-800 text-center space-y-2">
-                <Award className="w-10 h-10 text-slate-600 mx-auto" />
-                <h4 className="text-sm font-semibold text-slate-300">No assignments posted yet</h4>
-                <p className="text-xs text-slate-500">New assignments will be shown here when published.</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {assignments.map((assign) => {
-                  const isExpired = new Date(assign.due_date) < new Date();
-                  const submission = submissions.find(s => s.assignment_id === assign.id);
-                  const formattedDeadline = new Date(assign.due_date).toLocaleString('en-US', {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  });
-
-                  return (
-                    <div key={assign.id} className="p-5 rounded-2xl bg-[#131c31] border border-slate-800 hover:border-slate-700 transition space-y-4">
-                      
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <h4 className="text-sm font-bold text-white">{assign.title}</h4>
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                              submission 
-                                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                                : isExpired 
-                                ? 'bg-red-500/20 text-red-400 border border-red-500/30' 
-                                : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                            }`}>
-                              {submission ? '✅ Submitted' : isExpired ? '⛔ Closed (Late)' : '⏳ Open (Active)'}
-                            </span>
-                          </div>
-                          {assign.description && (
-                            <p className="text-xs text-slate-400">{assign.description}</p>
-                          )}
-                        </div>
-
-                        <div className="flex items-center gap-3">
-                          <span className="font-mono text-xs font-bold text-purple-300 bg-purple-500/10 px-3 py-1 rounded-xl border border-purple-500/20">
-                            🎯 Max Marks: {assign.total_marks}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-wrap items-center justify-between gap-3 text-xs bg-[#0c1322] p-3 rounded-xl border border-slate-800/80">
-                        <span className="flex items-center gap-1.5 font-semibold text-amber-300">
-                          <Clock className="w-4 h-4 text-amber-400" />
-                          <span>Deadline: {formattedDeadline}</span>
-                        </span>
-
-                        {assign.file_url && (
-                          <a
-                            href={assign.file_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-blue-400 hover:underline flex items-center gap-1 font-semibold"
-                          >
-                            <Download className="w-3.5 h-3.5" />
-                            <span>Download Question Paper (PDF)</span>
-                          </a>
-                        )}
-                      </div>
-
-                      {/* Submission Area */}
-                      <div className="pt-2 border-t border-slate-800">
-                        {submission ? (
-                          <div className="p-3 rounded-xl bg-emerald-950/20 border border-emerald-500/30 flex flex-wrap items-center justify-between gap-3">
-                            <div className="flex items-center gap-2 text-xs text-emerald-300">
-                              <CheckCircle className="w-4 h-4 text-emerald-400" />
-                              <span>You submitted this assignment on {new Date(submission.submitted_at).toLocaleDateString('en-US')}.</span>
+            {activeTab === 'assignments' && (
+              <div className="bg-[#0c1322] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
+                <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+                  <div>
+                    <h3 className="text-base font-bold text-white flex items-center gap-2"><Award className="w-5 h-5 text-amber-400" /><span>Assignments & Evaluations</span></h3>
+                  </div>
+                </div>
+                {assignments.length === 0 ? (
+                  <div className="p-16 rounded-xl bg-slate-900/30 border border-dashed border-slate-800 text-center space-y-2">
+                    <Award className="w-10 h-10 text-slate-600 mx-auto" />
+                    <h4 className="text-sm font-semibold text-slate-300">No assignments posted yet</h4>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {assignments.map((assign) => {
+                      const isExpired = new Date(assign.due_date) < new Date();
+                      const submission = submissions.find(s => s.assignment_id === assign.id);
+                      const formattedDeadline = new Date(assign.due_date).toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                      return (
+                        <div key={assign.id} className="p-5 rounded-2xl bg-[#131c31] border border-slate-800 hover:border-slate-700 transition space-y-4">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <h4 className="text-sm font-bold text-white">{assign.title}</h4>
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${submission ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : isExpired ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'}`}>
+                                  {submission ? '✅ Submitted' : isExpired ? '⛔ Closed (Late)' : '⏳ Open (Active)'}
+                                </span>
+                              </div>
+                              {assign.description && <p className="text-xs text-slate-400">{assign.description}</p>}
                             </div>
                             <div className="flex items-center gap-3">
-                              {submission.marks !== null && (
-                                <span className="font-mono font-bold text-xs text-emerald-400">
-                                  Marks: {submission.marks} / {assign.total_marks}
-                                </span>
-                              )}
-                              <a
-                                href={submission.submission_file_url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-xs text-blue-400 hover:underline flex items-center gap-1"
-                              >
-                                <ExternalLink className="w-3.5 h-3.5" />
-                                <span>View Your Answer Sheet</span>
-                              </a>
+                              <span className="font-mono text-xs font-bold text-purple-300 bg-purple-500/10 px-3 py-1 rounded-xl border border-purple-500/20">🎯 Max Marks: {assign.total_marks}</span>
                             </div>
                           </div>
-                        ) : isExpired ? (
-                          <div className="text-xs text-red-400 flex items-center gap-1.5 p-2 bg-red-500/10 rounded-xl border border-red-500/20">
-                            <AlertCircle className="w-4 h-4" />
-                            <span>The submission deadline for this assignment has passed.</span>
+                          <div className="flex flex-wrap items-center justify-between gap-3 text-xs bg-[#0c1322] p-3 rounded-xl border border-slate-800/80">
+                            <span className="flex items-center gap-1.5 font-semibold text-amber-300"><Clock className="w-4 h-4 text-amber-400" /><span>Deadline: {formattedDeadline}</span></span>
+                            {assign.file_url && <a href={assign.file_url} target="_blank" rel="noreferrer" className="text-blue-400 hover:underline flex items-center gap-1 font-semibold"><Download className="w-3.5 h-3.5" /><span>Download Question Paper (PDF)</span></a>}
                           </div>
-                        ) : (
-                          <div>
-                            {submittingAssignId === assign.id ? (
-                              <div className="p-4 rounded-xl bg-[#0c1322] border border-amber-500/40 space-y-3">
-                                <h5 className="text-xs font-bold text-white">Upload Answer Sheet (PDF or Image)</h5>
-                                <input
-                                  type="file"
-                                  required
-                                  accept=".pdf,image/*"
-                                  onChange={(e) => setSubmissionFile(e.target.files?.[0] || null)}
-                                  className="w-full text-xs text-slate-300 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-amber-600/20 file:text-amber-400 hover:file:bg-amber-600/30 cursor-pointer bg-[#131c31] border border-slate-700 rounded-xl p-2"
-                                />
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    onClick={() => handleSubmitAssignment(assign.id)}
-                                    disabled={uploadingSubmission}
-                                    className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs rounded-xl transition cursor-pointer shadow-lg shadow-amber-600/20 disabled:opacity-50 flex items-center gap-1.5"
-                                  >
-                                    <UploadCloud className="w-4 h-4" />
-                                    <span>{uploadingSubmission ? 'Uploading...' : 'Submit Answer Sheet'}</span>
-                                  </button>
-                                  <button
-                                    onClick={() => { setSubmittingAssignId(null); setSubmissionFile(null); }}
-                                    className="px-3 py-2 bg-slate-800 text-slate-400 hover:text-white text-xs rounded-xl transition"
-                                  >
-                                    Cancel
-                                  </button>
+                          <div className="pt-2 border-t border-slate-800">
+                            {submission ? (
+                              <div className="p-3 rounded-xl bg-emerald-950/20 border border-emerald-500/30 flex flex-wrap items-center justify-between gap-3">
+                                <div className="flex items-center gap-2 text-xs text-emerald-300">
+                                  <CheckCircle className="w-4 h-4 text-emerald-400" /><span>You submitted this assignment on {new Date(submission.submitted_at).toLocaleDateString('en-US')}.</span>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  {submission.marks !== null && <span className="font-mono font-bold text-xs text-emerald-400">Marks: {submission.marks} / {assign.total_marks}</span>}
+                                  <a href={submission.submission_file_url} target="_blank" rel="noreferrer" className="text-xs text-blue-400 hover:underline flex items-center gap-1"><ExternalLink className="w-3.5 h-3.5" /><span>View Your Answer Sheet</span></a>
                                 </div>
                               </div>
+                            ) : isExpired ? (
+                              <div className="text-xs text-red-400 flex items-center gap-1.5 p-2 bg-red-500/10 rounded-xl border border-red-500/20"><AlertCircle className="w-4 h-4" /><span>The submission deadline has passed.</span></div>
                             ) : (
-                              <button
-                                onClick={() => setSubmittingAssignId(assign.id)}
-                                className="px-4 py-2 bg-amber-600/20 hover:bg-amber-600 text-amber-300 hover:text-white border border-amber-500/30 font-bold text-xs rounded-xl transition cursor-pointer flex items-center gap-1.5"
-                              >
-                                <UploadCloud className="w-4 h-4" />
-                                <span>📤 Submit Answer Sheet</span>
-                              </button>
+                              <div>
+                                {submittingAssignId === assign.id ? (
+                                  <div className="p-4 rounded-xl bg-[#0c1322] border border-amber-500/40 space-y-3">
+                                    <h5 className="text-xs font-bold text-white">Upload Answer Sheet (PDF or Image)</h5>
+                                    <input type="file" required accept=".pdf,image/*" onChange={(e) => setSubmissionFile(e.target.files?.[0] || null)} className="w-full text-xs text-slate-300 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-amber-600/20 file:text-amber-400 hover:file:bg-amber-600/30 cursor-pointer bg-[#131c31] border border-slate-700 rounded-xl p-2" />
+                                    <div className="flex items-center gap-2">
+                                      <button onClick={() => handleSubmitAssignment(assign.id)} disabled={uploadingSubmission} className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs rounded-xl transition cursor-pointer shadow-lg flex items-center gap-1.5"><UploadCloud className="w-4 h-4" /><span>{uploadingSubmission ? 'Uploading...' : 'Submit Answer Sheet'}</span></button>
+                                      <button onClick={() => { setSubmittingAssignId(null); setSubmissionFile(null); }} className="px-3 py-2 bg-slate-800 text-slate-400 hover:text-white text-xs rounded-xl transition">Cancel</button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <button onClick={() => setSubmittingAssignId(assign.id)} className="px-4 py-2 bg-amber-600/20 hover:bg-amber-600 text-amber-300 hover:text-white border border-amber-500/30 font-bold text-xs rounded-xl transition cursor-pointer flex items-center gap-1.5"><UploadCloud className="w-4 h-4" /><span>📤 Submit Answer Sheet</span></button>
+                                )}
+                              </div>
                             )}
                           </div>
-                        )}
-                      </div>
-
-                    </div>
-                  );
-                })}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
-          </div>
+          </>
         )}
-
       </main>
-
+      
       {/* 💳 MODAL: UPLOAD BANK SLIP */}
       {showSlipModal && (
         <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-[#0c1322] border border-slate-800 max-w-md w-full rounded-3xl p-6 sm:p-7 space-y-5 shadow-2xl relative">
-            <button
-              onClick={() => { setShowSlipModal(false); setSlipSuccessMsg(false); }}
-              className="absolute right-5 top-5 p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-
+            <button onClick={() => { setShowSlipModal(false); setSlipSuccessMsg(false); }} className="absolute right-5 top-5 p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white cursor-pointer"><X className="w-4 h-4" /></button>
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400">
-                <CreditCard className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-white">Bank Deposit Slip Submission</h3>
-                <p className="text-xs text-slate-400">{activeCourse?.title}</p>
-              </div>
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400"><CreditCard className="w-5 h-5" /></div>
+              <div><h3 className="text-base font-bold text-white">Bank Deposit Slip Submission</h3><p className="text-xs text-slate-400">{activeCourse?.title}</p></div>
             </div>
-
             <div className="p-3.5 rounded-xl bg-[#131c31] border border-slate-800 text-xs space-y-1 text-slate-300">
               <div className="font-semibold text-amber-300">🏦 Class Fee Deposit Account Details:</div>
               <p className="font-mono text-white text-[13px]">BOC / Commercial Bank</p>
               <p className="text-slate-400 text-[11px]">Account Name: Learn ICT with Mano</p>
             </div>
-
             {slipSuccessMsg ? (
-              <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
-                <Check className="w-5 h-5 text-emerald-400 shrink-0" />
-                <span>Deposit slip submitted successfully! Access will be activated upon teacher review.</span>
-              </div>
+              <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2"><Check className="w-5 h-5 text-emerald-400 shrink-0" /><span>Deposit slip submitted successfully! Access will be activated upon teacher review.</span></div>
             ) : (
               <form onSubmit={handleUploadSlip} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
-                    Amount Paid (Rs.) *
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    placeholder="1500"
-                    value={slipAmount}
-                    onChange={(e) => setSlipAmount(e.target.value)}
-                    className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-emerald-400 font-mono focus:outline-none focus:border-amber-500"
-                  />
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Amount Paid (Rs.) *</label>
+                  <input type="number" required placeholder="1500" value={slipAmount} onChange={(e) => setSlipAmount(e.target.value)} className="w-full bg-[#131c31] border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-emerald-400 font-mono focus:outline-none focus:border-amber-500" />
                 </div>
-
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
-                    Attach Deposit Slip Photo or PDF *
-                  </label>
-                  <input
-                    type="file"
-                    required
-                    accept="image/*,.pdf"
-                    onChange={(e) => setSlipFile(e.target.files?.[0] || null)}
-                    className="w-full text-xs text-slate-300 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-amber-600/20 file:text-amber-400 hover:file:bg-amber-600/30 cursor-pointer bg-[#131c31] border border-slate-700 rounded-xl p-2"
-                  />
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Attach Deposit Slip Photo or PDF *</label>
+                  <input type="file" required accept="image/*,.pdf" onChange={(e) => setSlipFile(e.target.files?.[0] || null)} className="w-full text-xs text-slate-300 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-amber-600/20 file:text-amber-400 hover:file:bg-amber-600/30 cursor-pointer bg-[#131c31] border border-slate-700 rounded-xl p-2" />
                 </div>
-
-                <button
-                  type="submit"
-                  disabled={uploadingSlip}
-                  className="w-full py-3 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-bold rounded-xl text-xs transition shadow-lg shadow-amber-600/20 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <UploadCloud className="w-4 h-4" />
-                  <span>{uploadingSlip ? 'Uploading...' : 'Confirm & Submit Deposit Slip'}</span>
-                </button>
+                <button type="submit" disabled={uploadingSlip} className="w-full py-3 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-bold rounded-xl text-xs transition shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"><UploadCloud className="w-4 h-4" /><span>{uploadingSlip ? 'Uploading...' : 'Confirm & Submit Deposit Slip'}</span></button>
               </form>
             )}
           </div>
         </div>
       )}
-
     </div>
   );
 }
